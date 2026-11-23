@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { deleteCookie, getSignedCookie, setSignedCookie } from 'hono/cookie';
+import { modulesFor } from '../modules/config.js';
 
 const cookieName = 'deanery_session';
 const eightHours = 8 * 60 * 60;
@@ -9,6 +10,7 @@ export function sessions(db, secret, secure) {
   if (typeof secret !== 'string' || Buffer.byteLength(secret) < 32) {
     throw new Error('SESSION_SECRET должен содержать минимум 32 байта.');
   }
+  const staffEnabled = modulesFor(db).has('office');
   const options = { httpOnly: true, sameSite: 'Lax', path: '/', secure };
   let lastCleanup = 0;
 
@@ -18,7 +20,8 @@ export function sessions(db, secret, secure) {
     }
   }
 
-  async function issue(c, studentId, { staffId = null } = {}) {
+  async function issue(c, studentId, { staffId = null, expectedPasswordHash } = {}) {
+    if (staffId !== null && !staffEnabled) throw new Error('Вход для сотрудников недоступен.');
     if (studentId !== null && staffId !== null) throw new Error('У сессии может быть только один владелец.');
     const token = randomBytes(32).toString('base64url');
     const csrf = randomBytes(24).toString('base64url');
@@ -27,6 +30,11 @@ export function sessions(db, secret, secure) {
     const sessionKey = keyFor(token);
     db.exec('BEGIN IMMEDIATE');
     try {
+      if (expectedPasswordHash && !db.prepare('SELECT 1 FROM accounts WHERE student_id = ? AND password_hash = ?')
+        .get(studentId, expectedPasswordHash)) {
+        db.exec('COMMIT');
+        return false;
+      }
       forget(c);
       db.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(now);
       db.prepare('INSERT INTO sessions (id, student_id, csrf_token, expires_at) VALUES (?, ?, ?, ?)')
@@ -41,6 +49,7 @@ export function sessions(db, secret, secure) {
     }
     await setSignedCookie(c, cookieName, token, secret, { ...options, maxAge: ttl });
     c.set('csrfToken', csrf);
+    return true;
   }
 
   async function load(c, next) {
@@ -53,16 +62,16 @@ export function sessions(db, secret, secure) {
     if (token) {
       const key = keyFor(token);
       const row = db.prepare(`
-        SELECT s.student_id, s.csrf_token, a.id AS staff_id, a.full_name, a.role
+        SELECT s.student_id, s.csrf_token${staffEnabled ? ', a.id AS staff_id, a.full_name, a.role' : ''}
         FROM sessions s
-        LEFT JOIN staff_sessions staff ON staff.session_id = s.id
-        LEFT JOIN staff_accounts a ON a.id = staff.staff_id AND a.active = 1
+        ${staffEnabled ? `LEFT JOIN staff_sessions staff ON staff.session_id = s.id
+          LEFT JOIN staff_accounts a ON a.id = staff.staff_id AND a.active = 1` : ''}
         WHERE s.id = ? AND s.expires_at > ?
       `).get(key, now);
       if (row) {
         c.set('sessionKey', key);
         c.set('studentId', row.student_id);
-        if (row.staff_id !== null) c.set('staff', { id: row.staff_id, full_name: row.full_name, role: row.role });
+        if (staffEnabled && row.staff_id !== null) c.set('staff', { id: row.staff_id, full_name: row.full_name, role: row.role });
         c.set('csrfToken', row.csrf_token);
       }
     }

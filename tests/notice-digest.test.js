@@ -1,0 +1,30 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { fixture } from './support/app-fixture.js';
+
+test('дайджест фильтрует московские даты, показывает срочные переносы и сохраняет фильтр после прочтения', async t => {
+  const { db, login } = fixture(t);
+  db.prepare("INSERT INTO lessons VALUES (801, 'Р-21', 'Пара завтра', 'Демо', '2026-11-24', '11:00', '12:00', '100')").run();
+  db.prepare("INSERT INTO room_changes VALUES (801, 801, '101')").run();
+  const add = db.prepare("INSERT INTO notices (group_code, kind, message, notice_date) VALUES ('Р-21', 'Объявление', ?, ?)");
+  add.run('Объявление сегодня', '2026-11-23');
+  add.run('Объявление через шесть дней', '2026-11-29');
+  add.run('Объявление через семь дней', '2026-11-30');
+  db.prepare("INSERT INTO deadlines (student_id, title, due_date, created_at) VALUES (1, 'Личный срок завтра', '2026-11-24', deanery_timestamp())").run();
+  const [mira, mark] = await Promise.all([login('mira'), login('mark')]);
+  const today = await mira.page('/notices?period=today');
+  assert.match(today, /Объявление сегодня/);
+  assert.doesNotMatch(today, /Пара завтра|Личный срок завтра|через шесть дней/);
+  const week = await mira.page('/notices?period=week');
+  assert.match(week, /Требует действия[\s\S]*Срочно[\s\S]*Личный срок завтра/);
+  assert.match(week, /Изменения[\s\S]*Срочно[\s\S]*Пара завтра/);
+  assert.match(week, /Объявление через шесть дней/);
+  assert.doesNotMatch(week, /Объявление через семь дней/);
+  assert.doesNotMatch(await mark.page('/notices?period=week'), /Пара завтра|Личный срок завтра/);
+  const response = await mira.post('/notices/read', { kind: 'room', event: '801', view: 'unread', period: 'week' });
+  assert.equal(response.status, 303);
+  assert.equal(response.headers.get('location'), '/notices?view=unread&period=week');
+  assert.doesNotMatch(await mira.page(response.headers.get('location')), /Пара завтра/);
+  assert.match(await mira.page('/notices'), /Объявление через семь дней/);
+  assert.match(await mark.page('/notices?view=unread&period=today'), /За выбранный период уведомлений нет/);
+});

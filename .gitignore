@@ -3,6 +3,8 @@ node_modules/
 var/
 *.sqlite
 *.sqlite-*
+!/data/production.sqlite
+!/data/demo.sqlite
 *.db
 *.bundle
 *.log
@@ -16,6 +18,7 @@ journal/*.sqlite*
 # Рабочие материалы агентов и ОС
 /.agents/*
 !/.agents/ECC-SKILLS.md
+!/.agents/DESIGN-SKILLS.md
 !/.agents/skills/
 !/.agents/licenses/
 .DS_Store

@@ -10,41 +10,49 @@ const filters = [
   { view: 'debts', href: '/grades?view=debts', label: 'Задолженности', empty: 'Задолженностей нет.' },
 ];
 
-function result(grade) {
+function result(grade, exams) {
   if (grade.state === 'debts') return html`<strong class="status-pill is-error">${grade.result}</strong>`;
   if (grade.result) return html`<span class="status-pill${grade.passed ? ' is-ready' : ''}"><strong>${grade.result}</strong></span>`;
-  return html`<span class="status-pill">Ещё не выставлен${grade.exam_date ? html` · ${formatDate(grade.exam_date)}` : ''}</span>`;
+  const details = exams?.examDetails(grade) ?? (grade.exam_date ? formatDate(grade.exam_date) : '');
+  const previous = exams?.previousExamDetails(grade);
+  return html`<span class="status-pill">Ещё не выставлен${details ? html` · ${details}` : ''}</span>
+    ${previous ? html`<p class="hint">Было: ${previous}</p>` : ''}`;
 }
 
-export function gradesPage({ view, rows, hasGrades, average, pendingCount, debtCount }, student, csrf) {
+export function gradesPage({ view, rows, hasGrades, average, pendingCount, debtCount }, student, csrf, { transcript = true, exams, cardHref } = {}) {
   return layout('Ведомость', html`
     <main id="content" class="page grades">
       <header class="identity directory-title">
         <div><p class="eyebrow">Успеваемость</p><h1>Ведомость</h1></div>
-        <a class="button-link primary" href="/grades/transcript">Выписка об успеваемости</a>
+        ${transcript ? html`<a class="button-link primary" href="/grades/transcript">Выписка об успеваемости</a>` : ''}
       </header>
       <dl class="grade-overview">
         <div><dt>Средний балл</dt><dd>${average === null ? '—' : gradeNumber.format(average)}</dd></div>
         <div><dt>Ждут результата</dt><dd>${pendingCount}</dd></div>
         <div><dt>Задолженности</dt><dd>${debtCount}</dd></div>
       </dl>
-      <nav class="section-links" aria-label="Фильтр ведомости">
+      <nav class="section-links" aria-label="Ведомость и сессия">
+        <a href="/grades/session">Режим сессии</a>
         ${filters.map(filter => filter.view === view
           ? html`<a href="${filter.href}" aria-current="page">${filter.label}</a>`
           : html`<a href="${filter.href}">${filter.label}</a>`)}
       </nav>
       ${rows.length
-        ? html`<dl class="grade-results">${rows.map(grade => html`
+        ? html`<dl class="grade-results">${rows.map(grade => {
+          const card = cardHref?.(grade);
+          return html`
             <div id="grade-${grade.id}" tabindex="-1">
-              <dt><a href="/grades/${grade.id}/history">${grade.subject}</a><span>${grade.assessment}</span></dt>
-              <dd>${result(grade)}</dd>
-            </div>`)}
+              <dt><a href="${card ?? `/grades/${grade.id}/history`}">${grade.subject}</a><span>${grade.assessment}</span>
+                ${card ? html`<a class="hint" href="/grades/${grade.id}/history">История попыток</a>` : ''}</dt>
+              <dd>${result(grade, exams)}</dd>
+            </div>`;
+        })}
           </dl>`
         : html`<p class="section-empty">${filters.find(filter => filter.view === (hasGrades ? view : 'all')).empty}</p>`}
     </main>`, { student, csrf, active: 'grades' });
 }
 
-export function gradeHistoryPage(history, student, csrf) {
+export function gradeHistoryPage(history, student, csrf, exams) {
   return layout(history.subject, html`
     <main id="content" class="page narrow">
       <a class="back-link" href="/grades">Вся ведомость</a>
@@ -56,7 +64,8 @@ export function gradeHistoryPage(history, student, csrf) {
             <strong>${attempt.result || 'Ещё не выставлен'}</strong>
             <p>${attempt.published_at
               ? `${attempt.kind === 'retake' ? 'Пересдача' : 'Ведомость'} № ${attempt.sheet_id} · ${formatDate(attempt.published_at)}`
-              : attempt.exam_date && !attempt.result ? formatDate(attempt.exam_date) : 'Ранее внесённая запись'}</p>
+              : index === 0 && history.current ? exams?.examDetails(history.current) ?? formatDate(history.current.exam_date)
+                : attempt.exam_date && !attempt.result ? formatDate(attempt.exam_date) : 'Ранее внесённая запись'}</p>
           </div>
           ${index === 0 ? html`<span class="status-pill">Текущая запись</span>` : ''}
         </li>`)}</ol>

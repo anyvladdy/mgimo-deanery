@@ -1,6 +1,8 @@
 import { Hono } from 'hono';
+import { modulesFor } from '../modules/config.js';
 import { messagePage } from '../ui/layout.js';
-import { listRequests, requestForStudent, createCertificateRequest, postponableCourses, requestPostponement, answerClarification, clarificationLimit } from './requests.js';
+import { listRequests, requestForStudent, createCertificateRequest, postponableCourses, requestPostponement, answerClarification, clarificationLimit, certificateKind, readyStatus } from './requests.js';
+import { certificateForStudent, certificatePrint } from './certificates.js';
 import { requestsPage, requestPage } from './pages.js';
 
 function idFrom(value) {
@@ -10,8 +12,10 @@ function idFrom(value) {
 
 export function requestRoutes(db) {
   const routes = new Hono();
+  const modules = modulesFor(db);
+  const hasPostponements = modules.has('postponements');
   const list = (c, error = '') => requestsPage(
-    listRequests(db, c.get('studentId')), postponableCourses(db, c.get('studentId')),
+    listRequests(db, c.get('studentId')), hasPostponements ? postponableCourses(db, c.get('studentId')) : null,
     c.get('csrfToken'), c.get('student'), error,
   );
 
@@ -22,7 +26,7 @@ export function requestRoutes(db) {
     return c.redirect(`/requests/${id}`, 303);
   });
 
-  routes.post('/postpone', c => {
+  if (hasPostponements) routes.post('/postpone', c => {
     const choice = c.get('form').course;
     let parts;
     try {
@@ -44,16 +48,25 @@ export function requestRoutes(db) {
     'К моим заявкам',
     { student: c.get('student'), csrf: c.get('csrfToken'), active: 'requests' },
   ), 404);
-  const detail = (c, request, feedback) => requestPage(
-    request, c.get('csrfToken'), c.get('student'), feedback,
+  const detail = (c, request, feedback, certificate) => requestPage(
+    request, c.get('csrfToken'), c.get('student'), feedback, modules.has('messages'), certificate, modules.has('urgent-appeals'),
   );
 
   routes.get('/:id', c => {
     const request = requestForStudent(db, c.get('studentId'), idFrom(c.req.param('id')));
-    return request ? c.html(detail(c, request)) : missing(c);
+    if (!request) return missing(c);
+    const certificate = request.kind === certificateKind && request.status === readyStatus
+      ? certificateForStudent(db, request.id, c.get('studentId')) : null;
+    return c.html(detail(c, request, null, certificate));
   });
 
-  routes.post('/:id/clarifications/:cycleId/answer', c => {
+  routes.get('/:id/print', c => {
+    const id = idFrom(c.req.param('id'));
+    const certificate = certificateForStudent(db, id, c.get('studentId'));
+    return certificate ? c.html(certificatePrint(id, certificate, c.get('student'), c.get('csrfToken'))) : missing(c);
+  });
+
+  if (modules.has('request-review')) routes.post('/:id/clarifications/:cycleId/answer', c => {
     const id = idFrom(c.req.param('id'));
     const cycleId = idFrom(c.req.param('cycleId'));
     const { answer } = c.get('form');

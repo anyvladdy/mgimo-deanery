@@ -1,0 +1,98 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Цифровой деканат — сроки студента",
+    "version": "1.0.0",
+    "description": "Чтение открытых дедлайнов, групповых сроков и сроков оплаты студента по его личному токену."
+  },
+  "servers": [
+    { "url": "/", "description": "Адрес сервера цифрового деканата" }
+  ],
+  "paths": {
+    "/api/v1/deadlines": {
+      "get": {
+        "operationId": "listDeadlines",
+        "summary": "Получить ближайшие сроки студента",
+        "description": "Диапазон начинается сегодня по московскому времени и включает обе указанные в ответе даты.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          {
+            "name": "days",
+            "in": "query",
+            "description": "Количество календарных дней, включая сегодня. По умолчанию 30.",
+            "schema": { "type": "integer", "minimum": 1, "maximum": 90, "default": 30 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Открытые сроки в хронологическом порядке. Массив может быть пустым.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["from", "to", "deadlines"],
+                  "properties": {
+                    "from": { "type": "string", "format": "date" },
+                    "to": { "type": "string", "format": "date" },
+                    "deadlines": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/Deadline" }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Недопустимое значение days или неизвестный параметр запроса.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "401": {
+            "description": "Токен отсутствует, недействителен или просрочен.",
+            "headers": {
+              "WWW-Authenticate": { "schema": { "type": "string" } }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": { "type": "http", "scheme": "bearer" }
+    },
+    "schemas": {
+      "Deadline": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "kind", "title", "date"],
+        "properties": {
+          "id": { "type": "string", "description": "Стабильный идентификатор срока с префиксом источника." },
+          "kind": { "type": "string", "enum": ["deadline", "tuition"] },
+          "title": { "type": "string" },
+          "date": { "type": "string", "format": "date" },
+          "time": { "type": "string", "pattern": "^(?:[01][0-9]|2[0-3]):[0-5][0-9]$", "description": "Время срока в формате ЧЧ:ММ по Москве, если задано." },
+          "href": { "type": "string", "format": "uri-reference", "description": "Относительная ссылка на страницу деканата." }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["error"],
+        "properties": {
+          "error": { "type": "string", "enum": ["invalid_days", "invalid_query", "unauthorized"] }
+        }
+      }
+    }
+  }
+}

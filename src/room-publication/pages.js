@@ -1,17 +1,19 @@
 import { html } from 'hono/html';
+import { officeDateInput } from '../ui/date-input.js';
 import { formatDate } from '../ui/format.js';
 import { layout } from '../ui/layout.js';
 import { maxRoomLength } from './publication.js';
 
-export function roomSchedulePage(date, lessons, context) {
+export function roomSchedulePage(date, lessons, context, { dateInput = date, dateError = '' } = {}) {
   return layout('Аудитории по расписанию', html`
     <main class="page office-page" id="content">
       <a class="back-link" href="/office">К рабочему столу</a>
       <header class="identity"><h1>Аудитории по расписанию</h1></header>
       <form class="directory-filter" method="get" action="/office/schedule">
-        <label>Дата занятия <input type="date" name="date" value="${date}" required></label>
+        <div class="office-date-filter-field">${officeDateInput('lesson-date', 'Дата занятия', dateInput, dateError)}</div>
         <button class="secondary">Показать занятия</button>
       </form>
+      ${date ? html`<h2>Занятия на <time datetime="${date}">${formatDate(date)}</time></h2>
       ${lessons.length ? html`
         <ul class="office-records" role="list">${lessons.map(lesson => html`
           <li>
@@ -21,7 +23,7 @@ export function roomSchedulePage(date, lessons, context) {
             </div>
             ${lesson.new_room !== null ? html`<span class="status-pill is-ready">Перенос опубликован</span>` : ''}
           </li>`)}</ul>
-      ` : html`<p class="section-empty">На эту дату занятий нет.</p>`}
+      ` : html`<p class="section-empty">На эту дату занятий нет.</p>`}` : ''}
     </main>`, context);
 }
 
@@ -36,7 +38,7 @@ export function roomPublicationPage(lesson, context, { error = '', room = '' } =
         <div><dt>Преподаватель</dt><dd>${lesson.teacher}</dd></div>
         <div><dt>Группа</dt><dd>${lesson.group_code}</dd></div>
         <div><dt>Дата и время</dt>
-          <dd><time datetime="${lesson.lesson_date}">${formatDate(lesson.lesson_date)}</time> · ${lesson.starts_at}–${lesson.ends_at}</dd></div>
+          <dd><time datetime="${lesson.lesson_date}">${formatDate(lesson.lesson_date)}</time> · ${lesson.starts_at}–${lesson.ends_at} МСК</dd></div>
         <div><dt>Исходная аудитория</dt><dd>${lesson.scheduled_room}</dd></div>
         ${published ? html`<div><dt>Новая аудитория</dt><dd>${lesson.new_room}</dd></div>` : ''}
       </dl>

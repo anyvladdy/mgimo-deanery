@@ -50,8 +50,18 @@ test('офис публикует аудиторию, а расписание и
   assert.match(await (await get(app, '/office', staff)).text(), /href="\/office\/schedule"/);
   const list = await (await get(app, '/office/schedule', staff)).text();
   assert.match(list, /href="\/office\/schedule\/601"/);
+  assert.match(list, /id="lesson-date"[^>]*value="23.11.2026"/);
   assert.doesNotMatch(list, /Семинар в декабре/);
-  assert.match(await (await get(app, '/office/schedule?date=2026-12-01', staff)).text(), /href="\/office\/schedule\/602"/);
+  for (const date of ['2026-12-01', '01.12.2026', '01122026']) {
+    const response = await get(app, `/office/schedule?date=${date}`, staff);
+    assert.equal(response.status, 200);
+    assert.match(await response.text(), /href="\/office\/schedule\/602"/);
+  }
+  const invalidDate = await get(app, '/office/schedule?date=31.02.2026', staff);
+  assert.equal(invalidDate.status, 422);
+  const invalidPage = await invalidDate.text();
+  assert.match(invalidPage, /id="lesson-date"[^>]*value="31.02.2026"[^>]*aria-invalid="true"/);
+  assert.doesNotMatch(invalidPage, /href="\/office\/schedule\/60[12]"/);
   const preview = await (await get(app, path, staff)).text();
   for (const label of [/Семинар сегодня/, /Р-21/, /А\. Л\. Белова/, /23 ноября 2026/, /400/, /Опубликовать/]) {
     assert.match(preview, label);

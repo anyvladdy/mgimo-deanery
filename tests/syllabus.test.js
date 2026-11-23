@@ -35,7 +35,7 @@ test('офис публикует силлабус существующей ди
   const saved = await post(path, staff, { ...content, _csrf: token(form) });
   assert.equal(saved.status, 303);
   const id = saved.headers.get('location').match(/syllabuses\/(\d+)/)[1];
-  assert.match(await (await get('/plan', mira)).text(), new RegExp(`href="/syllabuses/${id}">История региона`));
+  assert.match(await (await get('/plan', mira)).text(), new RegExp(`href="/syllabuses/${id}">Силлабус`));
   const results = await (await get(`/syllabuses?q=${encodeURIComponent('ИСТОРИЯ')}`, mira)).text();
   assert.match(results, /История региона/);
   assert.doesNotMatch(results, /Микроэкономика/);

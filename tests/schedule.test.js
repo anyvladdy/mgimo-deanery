@@ -1,17 +1,16 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, test } from 'node:test';
 import { openDatabase } from '../src/db/open.js';
 import { weekForStudent, changesForStudent, markChangeRead, isDate, weekStartOf } from '../src/schedule/schedule.js';
+import { seedDemoData } from '../demo/seed.js';
 import { setupDemo } from '../demo/setup.js';
 import { createApp } from '../src/server.js';
 
 const monday = '2026-11-23';
-const fixture = readFileSync(new URL('../demo/seed.sql', import.meta.url), 'utf8');
 let db;
 beforeEach(() => {
   db = openDatabase();
-  db.exec(fixture);
+  seedDemoData(db);
 });
 afterEach(() => db.close());
 
@@ -63,6 +62,10 @@ test('расписание Миры показывает день, неделю 
   const profile = await (await get(app, '/profile', session)).text();
   assert.match(profile, /href="\/schedule"/);
   const body = await (await get(app, '/schedule', session)).text();
+  assert.match(body, /<h1>Расписание занятий<\/h1>/);
+  assert.match(body, /href="\/schedule" aria-current="page">Пары<\/a>/);
+  assert.match(body, /Пары вашей группы, преподаватели, аудитории и переносы/);
+  assert.match(body, /href="\/calendar\?date=2026-11-23">Все события недели<\/a>/);
   assert.match(body, /Английский язык/);
   assert.match(body, /10:40/);
   assert.match(body, /ауд\. 307/);

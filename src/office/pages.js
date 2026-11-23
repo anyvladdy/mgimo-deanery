@@ -1,13 +1,5 @@
 import { html } from 'hono/html';
 import { layout } from '../ui/layout.js';
-import { formatDate } from '../ui/format.js';
-import { certificateKind, initialStatus, readyStatus, approvedStatus, rejectedStatus, postponementKind, waitingStatus, clarificationLimit } from '../requests/requests.js';
-import { clarificationHistory } from '../requests/pages.js';
-import { movementHistory } from '../registry/pages.js';
-
-function status(value) {
-  return html`<span class="status-pill${[readyStatus, approvedStatus].includes(value) ? ' is-ready' : [rejectedStatus, waitingStatus].includes(value) ? ' is-warning' : ''}">${value}</span>`;
-}
 
 function officePage(title, content, context, active) {
   return layout(title, html`<main class="page office-page" id="content">${content}</main>`, { ...context, active });
@@ -17,9 +9,8 @@ export function officeLogin(csrf, login = '', error = '') {
   return layout('Вход для сотрудника', html`
     <main id="content" class="page staff-login">
       <div class="office-banner">
-        <p class="eyebrow">Деканат</p>
         <h1>Учебный офис</h1>
-        <p>Заявки студентов, учебные планы и силлабусы.</p>
+        <p>Войдите, чтобы открыть рабочий кабинет.</p>
       </div>
       <section class="login-panel" aria-labelledby="office-login-title">
         <h2 id="office-login-title">Вход для сотрудника</h2>
@@ -36,115 +27,51 @@ export function officeLogin(csrf, login = '', error = '') {
     </main>`, { staffMode: true });
 }
 
-function inboxRows(rows, empty) {
-  return rows.length ? html`<ul class="office-records" role="list">${rows.map(request => html`
-    <li><div>
-      <a href="/office/requests/${request.id}">${request.subject ?? request.kind}</a>
-      <p>${request.full_name} · ${request.group_code} · ${formatDate(request.created_at)}</p>
-    </div>${status(request.status)}</li>`)}</ul>`
-    : html`<p class="section-empty">${empty}</p>`;
+export function teacherHome(context) {
+  return officePage('Кабинет преподавателя', html`
+    <header class="identity"><h1>Кабинет преподавателя</h1></header>
+    <p class="section-empty">Сейчас в кабинете нет доступных разделов.</p>`, context, 'office');
 }
 
-export function officeHome(totals, pending, context) {
+export function officeHome(totals, pending, cards, context) {
+  const hasQueues = pending || totals.recoveries;
   return officePage('Рабочий стол', html`
-    <div class="office-dashboard">
+    <div class="${hasQueues ? 'office-dashboard' : ''}">
       <section class="office-banner">
         <p class="eyebrow">Учебный офис</p>
         <h1>Рабочий стол</h1>
         <dl>
-          <div><dt>На рассмотрении</dt><dd>${pending.length}</dd></div>
+          ${pending ? html`<div><dt>Учебные заявки на рассмотрении</dt><dd>${pending.count}</dd></div>` : ''}
           <div><dt>Студентов</dt><dd>${totals.students}</dd></div>
           <div><dt>Групп</dt><dd>${totals.groups}</dd></div>
         </dl>
-        <a class="button-link" href="/office/requests">Открыть реестр заявок</a>
+        ${pending ? html`<a class="button-link" href="/office/requests">Открыть реестр заявок</a>` : ''}
       </section>
-      <section class="office-queue">
-        <h2>Новые заявки</h2>
-        ${inboxRows(pending.slice(0, 5), 'Все заявки обработаны.')}
-      </section>
+      ${hasQueues ? html`<div class="office-dashboard-queues">
+        ${totals.recoveries ? html`<section class="office-queue" aria-labelledby="office-recovery-title">
+          <h2 id="office-recovery-title">Восстановление доступа</h2>
+          <p>Ожидают рассмотрения · ${totals.recoveries}</p>
+          <a class="button-link secondary" href="/office/recovery">Открыть запросы</a>
+        </section>` : ''}
+        ${pending ? html`<section class="office-queue">
+          <h2>Новые заявки</h2>
+          ${pending.content}
+        </section>` : ''}
+      </div>` : ''}
     </div>
     <div class="office-links">
-      <a href="/office/schedule"><strong>Расписание</strong><span>Публикация переноса аудитории</span></a>
-      <a href="/office/students"><strong>Контингент</strong><span>Студенты, программы и индивидуальные планы</span></a>
-      <a href="/office/syllabuses"><strong>Силлабусы</strong><span>Описание дисциплин и условия оценки</span></a>
-      <a href="/office/registry"><strong>Программы и группы</strong><span>Новые программы, группы и зачисление</span></a>
-      <a href="/office/curriculum"><strong>Учебные планы</strong><span>Черновики, публикации и архив версий</span></a>
+      ${cards.filter(card => !totals.recoveries || card.path !== '/recovery').map(card => html`
+        <a href="/office${card.path}"><strong>${card.label}</strong><span>${card.description}</span></a>`)}
     </div>`, context, 'office');
 }
 
-export function officeInbox(rows, view, context) {
-  const empty = {
-    pending: 'Нет заявок на рассмотрении.',
-    waiting: 'Нет заявок, ожидающих ответа студента.',
-    closed: 'Обработанных заявок пока нет.',
-  };
-  return officePage('Заявки студентов', html`
-    <header class="identity"><p class="eyebrow">Учебный офис</p><h1>Заявки студентов</h1></header>
-    <nav class="section-links" aria-label="Статус заявки">
-      <a href="/office/requests" aria-current="${view === 'pending' ? 'page' : 'false'}">На рассмотрении</a>
-      <a href="/office/requests?view=waiting" aria-current="${view === 'waiting' ? 'page' : 'false'}">Ждут ответа студента</a>
-      <a href="/office/requests?view=closed" aria-current="${view === 'closed' ? 'page' : 'false'}">Обработанные</a>
-    </nav>
-    ${inboxRows(rows, empty[view])}`, context, 'office-requests');
-}
-
-export function officeRequestPage(request, context, error = '', comment = '', question = '') {
-  const actionable = request.status === initialStatus && [certificateKind, postponementKind].includes(request.kind);
-  const cycle = request.clarifications.at(-1)?.id ?? 0;
-  return officePage(request.kind, html`
-    <div class="office-detail">
-      <a class="back-link" href="/office/requests">Все заявки</a>
-      <header class="identity"><p class="eyebrow">Заявка № ${request.id}</p><h1>${request.kind}</h1></header>
-      ${error ? html`<p class="error" role="alert">${error}</p>` : ''}
-      <dl>
-        <div><dt>Студент</dt><dd><a href="/office/students/${request.student_id}">${request.full_name}</a> · ${request.group_code}</dd></div>
-        <div><dt>Дата подачи</dt><dd>${formatDate(request.created_at)}</dd></div>
-        ${request.subject ? html`<div><dt>Дисциплина</dt><dd>${request.subject} · ${request.assessment}</dd></div>` : ''}
-        <div><dt>Статус</dt><dd>${status(request.status)}</dd></div>
-        ${request.reviewer ? html`<div><dt>Кто рассмотрел</dt><dd>${request.reviewer} · ${formatDate(request.reviewed_at)}</dd></div>` : ''}
-        ${request.comment ? html`<div><dt>Комментарий</dt><dd class="review-comment">${request.comment}</dd></div>` : ''}
-      </dl>
-      ${request.status === waitingStatus ? html`<p>Дождитесь ответа студента, чтобы вынести решение.</p>` : ''}
-      ${clarificationHistory(request.clarifications)}
-      ${actionable ? html`
-        <section class="office-queue">
-          <h2>Запросить уточнение</h2>
-          <form class="form-panel" method="post" action="/office/requests/${request.id}/clarify">
-            <input type="hidden" name="_csrf" value="${context.csrf}">
-            <input type="hidden" name="cycle" value="${cycle}">
-            <label for="clarification-question">Вопрос студенту</label>
-            <textarea id="clarification-question" name="question" rows="4" maxlength="${clarificationLimit}" required>${question}</textarea>
-            <button class="secondary">Отправить вопрос</button>
-          </form>
-        </section>
-        <section class="office-queue">
-          <h2>Решение</h2>
-          <form class="form-panel" method="post" action="/office/requests/${request.id}/review">
-            <input type="hidden" name="_csrf" value="${context.csrf}">
-            <input type="hidden" name="cycle" value="${cycle}">
-            ${request.kind === certificateKind
-              ? html`<p>Студент увидит, что справка готова к выдаче.</p>
-                <button class="primary" name="action" value="ready">Отметить готовой</button>`
-              : html`
-                <label for="review-comment">Комментарий к решению</label>
-                <p class="hint" id="decision-hint">При отказе укажите причину. Студент увидит её в кабинете.</p>
-                <textarea name="comment" id="review-comment" maxlength="500" rows="3" aria-describedby="decision-hint">${comment}</textarea>
-                <div class="office-buttons">
-                  <button class="primary" name="action" value="approve">Одобрить перенос</button>
-                  <button class="secondary" name="action" value="reject">Отклонить</button>
-                </div>`}
-          </form>
-        </section>` : ''}
-    </div>`, context, 'office-requests');
-}
-
-export function officeDirectory(rows, { groups, search, group, page, total }, context) {
+export function officeDirectory(rows, { groups, search, group, page, total }, context, registryEnabled) {
   const pageHref = number => `/office/students?${new URLSearchParams({ q: search, group, page: number })}`;
   return officePage('Студенты', html`
     <header class="identity directory-title">
       <div><p class="eyebrow">Контингент</p><h1>Студенты</h1></div>
-      <div class="office-buttons"><a href="/office/registry">Программы и группы</a>
-        <a class="button-link primary" href="/office/registry/enroll">Зачислить студента</a></div>
+      ${registryEnabled ? html`<div class="office-buttons"><a href="/office/registry">Программы и группы</a>
+        <a class="button-link primary" href="/office/registry/enroll">Зачислить студента</a></div>` : ''}
     </header>
     <form class="directory-filter" method="get" action="/office/students">
       <div><label for="student-search">Имя студента</label>
@@ -155,7 +82,7 @@ export function officeDirectory(rows, { groups, search, group, page, total }, co
       </select></div>
       <button class="secondary">Найти</button>
     </form>
-    ${rows.length ? html`<ul class="office-records" role="list">${rows.map(student => html`
+    ${rows.length ? html`<ul class="office-records student-directory-list" role="list">${rows.map(student => html`
       <li><div><a href="/office/students/${student.id}">${student.full_name}</a><p>${student.program} · ${student.year} курс</p></div>
         <span class="status-pill">${student.group_code}</span></li>`)}</ul>` : html`<p class="section-empty">Студенты по этим условиям не найдены.</p>`}
     ${total > 30 ? html`<nav class="section-links" aria-label="Страницы списка студентов">
@@ -164,26 +91,32 @@ export function officeDirectory(rows, { groups, search, group, page, total }, co
     </nav>` : ''}`, context, 'office-students');
 }
 
-export function officeStudent(student, plan, movements, context) {
+export function officeStudent(student, plan, context, { history, registryEnabled, nameUpdated }) {
   return officePage(student.full_name, html`
     <div class="office-detail">
       <a class="back-link" href="/office/students">Все студенты</a>
       <header class="identity directory-title">
         <div><p class="eyebrow">${student.program} · ${student.group_code}</p><h1>${student.full_name}</h1></div>
-        <a class="button-link primary" href="/office/registry/students/${student.id}/move">Сменить группу</a>
+        ${registryEnabled ? html`<div class="office-buttons">
+          <a class="button-link secondary" href="/office/registry/students/${student.id}/name">Изменить ФИО</a>
+          <a class="button-link primary" href="/office/registry/students/${student.id}/move">Сменить группу</a>
+        </div>` : ''}
       </header>
+      ${nameUpdated ? html`<p class="request-receipt" role="status">ФИО обновлено.</p>` : ''}
       <dl>
         <div><dt>Факультет</dt><dd>${student.faculty}</dd></div>
         <div><dt>Курс</dt><dd>${student.year}</dd></div>
-        <div><dt>Освоено</dt><dd>${plan.earned} из ${plan.planned} з. е.</dd></div>
+        ${plan?.features.grades ? html`<div><dt>Освоено</dt><dd>${plan.earned} из ${plan.planned} з. е.</dd></div>` : ''}
       </dl>
-      <h2>Учебный план</h2>
-      ${plan.version ? html`<p>Действующая версия № ${plan.version}</p>` : ''}
-      ${plan.courses.length ? html`<dl class="plan-courses">${plan.courses.map(course => html`
-        <div><dt>${course.subject}<span>${course.assessment}${course.elective ? ' · По выбору' : course.retained ? ' · Из прежнего плана' : ''}</span></dt>
-          <dd>${course.credits} з. е. · ${course.result || 'В ожидании'}</dd></div>`)}</dl>` : html`<p>Учебный план пока пуст.</p>`}
-      ${plan.postponed.length ? html`<h2>На следующий учебный год</h2><ul>${plan.postponed.map(course => html`
-        <li><a href="/office/requests/${course.requestId}">${course.subject}</a></li>`)}</ul>` : ''}
-      ${movementHistory(movements, true)}
+      ${plan ? html`
+        <h2>Учебный план</h2>
+        ${plan.version ? html`<p>Действующая версия № ${plan.version}</p>` : ''}
+        ${plan.courses.length ? html`<dl class="plan-courses">${plan.courses.map(course => html`
+          <div><dt>${course.subject}<span>${course.assessment}${course.elective ? ' · По выбору' : course.retained ? ' · Из прежнего плана' : ''}</span></dt>
+            <dd>${course.credits} з. е.${plan.features.grades ? ` · ${course.result || 'В ожидании'}` : ''}</dd></div>`)}</dl>`
+          : html`<p>Учебный план пока пуст.</p>`}
+        ${plan.postponed.length ? html`<h2>На следующий учебный год</h2><ul>${plan.postponed.map(course => html`
+          <li><a href="/office/requests/${course.requestId}">${course.subject}</a></li>`)}</ul>` : ''}` : ''}
+      ${history ?? ''}
     </div>`, context, 'office-students');
 }

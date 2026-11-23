@@ -1,7 +1,7 @@
 import { writeTransaction } from '../db/write.js';
-import { gradeCourseKey } from '../grades/grades.js';
-import { retainCourses } from '../plan/retained.js';
-import { academicGroup } from '../registry/registry.js';
+import { hasTable } from '../db/sql.js';
+import { modulesFor } from '../modules/config.js';
+import { snapshotCurriculum } from './snapshot.js';
 
 export function curriculumIndex(db) {
   return db.prepare(`
@@ -40,7 +40,7 @@ function writeCourses(db, id, courses) {
 
 export function createDraft(db, groupCode, staffId) {
   return writeTransaction(db, () => {
-    if (!academicGroup(db, groupCode)) return null;
+    if (!modulesFor(db).get('registry').academicGroup(db, groupCode)) return null;
     const versions = versionsForGroup(db, groupCode);
     const existing = versions.find(item => item.state === 'draft');
     if (existing) return existing.id;
@@ -49,30 +49,31 @@ export function createDraft(db, groupCode, staffId) {
     // Первая управляемая версия фиксирует ранее действовавший план группы.
     if (number === 1 && courses.length) {
       const baseline = db.prepare(`
-        INSERT INTO curriculum_versions (group_code, version, state, published_at)
-        VALUES (?, 1, 'published', CURRENT_TIMESTAMP) RETURNING id
+        INSERT INTO curriculum_versions (group_code, version, state, created_at, published_at)
+        VALUES (?, 1, 'published', deanery_timestamp(), deanery_timestamp()) RETURNING id
       `).get(groupCode);
       writeCourses(db, baseline.id, courses);
+      snapshotCurriculum(db, groupCode, baseline.id);
       number += 1;
     }
     const draft = db.prepare(`
-      INSERT INTO curriculum_versions (group_code, version, state, created_by)
-      VALUES (?, ?, 'draft', ?) RETURNING id
+      INSERT INTO curriculum_versions (group_code, version, state, created_by, created_at)
+      VALUES (?, ?, 'draft', ?, deanery_timestamp()) RETURNING id
     `).get(groupCode, number, staffId);
     writeCourses(db, draft.id, courses);
     return draft.id;
   });
 }
 
-function compareCourses(previous, current) {
-  const before = new Map(previous.map(row => [gradeCourseKey(row), row]));
-  const after = new Map(current.map(row => [gradeCourseKey(row), row]));
+function compareCourses(previous, current, courseKey) {
+  const before = new Map(previous.map(row => [courseKey(row), row]));
+  const after = new Map(current.map(row => [courseKey(row), row]));
   return [
     ...current.flatMap(row => {
-      const old = before.get(gradeCourseKey(row));
+      const old = before.get(courseKey(row));
       return old?.credits === row.credits ? [] : [{ ...row, before: old?.credits ?? null, after: row.credits }];
     }),
-    ...previous.filter(row => !after.has(gradeCourseKey(row))).map(row => ({ ...row, before: row.credits, after: null })),
+    ...previous.filter(row => !after.has(courseKey(row))).map(row => ({ ...row, before: row.credits, after: null })),
   ];
 }
 
@@ -80,11 +81,12 @@ export function curriculumDetails(db, id) {
   const version = selectedVersion(db, id);
   if (!version) return null;
   const courses = coursesForVersion(db, id);
+  const modules = modulesFor(db);
   return {
     ...version,
-    group: academicGroup(db, version.group_code),
+    group: modules.get('registry').academicGroup(db, version.group_code),
     courses,
-    changes: version.state === 'draft' ? compareCourses(currentCourses(db, version.group_code), courses) : [],
+    changes: version.state === 'draft' ? compareCourses(currentCourses(db, version.group_code), courses, modules.get('plan').courseKey) : [],
   };
 }
 
@@ -112,6 +114,7 @@ const failingResult = `TRIM(g.result) IN ('2', 'Не зачтено', 'не за
 // Удалять дисциплину из плана можно, только когда по ней нет незакрытого долга.
 // Основная ведомость сохраняет состав и после перевода студента в другую группу.
 function hasOutstandingDebt(db, group, subject, assessment) {
+  if (!hasTable(db, 'grades')) return false;
   const current = db.prepare(`
     SELECT 1 FROM students s JOIN grades g ON g.student_id = s.id
     WHERE s.group_code = ? AND g.subject = ? AND g.assessment = ?
@@ -130,6 +133,7 @@ function hasOutstandingDebt(db, group, subject, assessment) {
       AND ${failingResult}
   `).get(group, subject, assessment);
   if (retained) return true;
+  if (!hasTable(db, 'grade_sheets') || !hasTable(db, 'grade_sheet_rows')) return false;
   return Boolean(db.prepare(`
     SELECT 1 FROM grade_sheets sh
     JOIN grade_sheet_rows r ON r.sheet_id = sh.id
@@ -150,22 +154,23 @@ export function publishCurriculum(db, id, revision, staffId) {
     if (version.state === 'published') return 'ok';
     if (version.state !== 'draft' || version.revision !== revision) return 'stale';
     if (!version.courses.length) return 'empty';
-    const activeSheet = db.prepare(`
+    const activeSheet = hasTable(db, 'grade_sheets') ? db.prepare(`
       SELECT 1 FROM grade_sheets WHERE group_code = ? AND subject = ? AND assessment = ? AND status = 'draft'
-    `);
+    `) : null;
     const removed = version.changes.filter(course => course.after === null);
-    if (removed.some(course => activeSheet.get(version.group_code, course.subject, course.assessment))) return 'gradebook';
+    if (removed.some(course => activeSheet?.get(version.group_code, course.subject, course.assessment))) return 'gradebook';
     if (removed.some(course => hasOutstandingDebt(db, version.group_code, course.subject, course.assessment))) return 'debt';
 
-    retainCourses(db, version.group_code);
+    modulesFor(db).get('plan').retainCourses(db, version.group_code);
     db.prepare(`
       INSERT INTO plan_group_courses (group_code, subject, assessment, credits)
       SELECT ?, subject, assessment, credits FROM curriculum_courses WHERE version_id = ?
       ON CONFLICT(group_code, subject, assessment) DO NOTHING
     `).run(version.group_code, id);
     db.prepare("UPDATE curriculum_versions SET state = 'archived' WHERE group_code = ? AND state = 'published'").run(version.group_code);
-    db.prepare("UPDATE curriculum_versions SET state = 'published', published_by = ?, published_at = CURRENT_TIMESTAMP WHERE id = ?")
+    db.prepare("UPDATE curriculum_versions SET state = 'published', published_by = ?, published_at = deanery_timestamp() WHERE id = ?")
       .run(staffId, id);
+    snapshotCurriculum(db, version.group_code, id);
     return 'ok';
   });
 }

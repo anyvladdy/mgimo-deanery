@@ -45,7 +45,7 @@ test('сквозной путь: вход, расписание, ведомос�
 
   const miraSession = await login(app, mira);
   const today = await (await get(app, '/', miraSession)).text();
-  assert.match(today, /Сегодня/);
+  assert.match(today, /<h1>Ближайшие занятия<\/h1>/);
   assert.match(today, /Английский язык/);
   assert.match(today, /Аудитория 307/);
   assert.match(today, /Было 214/);

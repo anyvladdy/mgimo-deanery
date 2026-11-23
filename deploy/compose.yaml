@@ -1,0 +1,18 @@
+services:
+  deanery:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      SESSION_SECRET: ${SESSION_SECRET:?Set SESSION_SECRET to a random value of at least 32 bytes}
+      DEANERY_DB: /data/deanery.sqlite
+      SCHOOL_CLOCK: ${SCHOOL_CLOCK:-real}
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - deanery-data:/data
+
+volumes:
+  deanery-data:

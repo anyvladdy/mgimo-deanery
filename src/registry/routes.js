@@ -1,8 +1,8 @@
 import { Hono } from 'hono';
 import { messagePage } from '../ui/layout.js';
-import { academicGroup, addProgram, addGroup, enrollStudent, groupsForOffice, moveStudent, registryOverview } from './registry.js';
-import { coursesToRetain } from '../plan/retained.js';
-import { registryPage, enrollmentPage, enrollmentReceipt, movePage } from './pages.js';
+import { academicGroup, addProgram, addGroup, enrollStudent, groupsForOffice, moveStudent, registryOverview, renameStudent, studentNameLimit } from './registry.js';
+import { modulesFor } from '../modules/config.js';
+import { registryPage, enrollmentPage, enrollmentReceipt, movePage, studentNamePage } from './pages.js';
 
 const ctx = c => ({ staff: c.get('staff'), csrf: c.get('csrfToken') });
 const field = (raw, max) => typeof raw === 'string' && raw.trim().length <= max ? raw.trim() : '';
@@ -12,7 +12,10 @@ const validId = raw => /^[1-9]\d*$/.test(raw) && Number.isSafeInteger(Number(raw
 
 export function registryRoutes(db) {
   const routes = new Hono();
-  const overview = (c, error = '') => registryPage(registryOverview(db), ctx(c), error);
+  const modules = modulesFor(db);
+  const overview = (c, error = '') => registryPage(
+    registryOverview(db), ctx(c), error, { curriculum: modules.has('curriculum') },
+  );
   routes.get('/', c => c.html(overview(c)));
   routes.post('/programs', c => {
     const { name, faculty } = c.get('form');
@@ -51,13 +54,34 @@ export function registryRoutes(db) {
   const findStudent = id => db.prepare('SELECT * FROM students WHERE id = ?').get(id);
   const missing = c => c.html(messagePage('Студент не найден', 'Откройте карточку из реестра.',
     '/office/students', 'Все студенты', ctx(c)), 404);
+  routes.get('/students/:id/name', c => {
+    const student = findStudent(validId(c.req.param('id')));
+    return student ? c.html(studentNamePage(student, ctx(c))) : missing(c);
+  });
+  routes.post('/students/:id/name', c => {
+    const student = findStudent(validId(c.req.param('id')));
+    if (!student) return missing(c);
+    const form = c.get('form');
+    const name = field(form.name, studentNameLimit);
+    if (!/\p{L}/u.test(name) || /\p{Cc}/u.test(name) || typeof form.expected !== 'string') {
+      return c.html(studentNamePage(student, ctx(c), { name, error: `Введите ФИО длиной до ${studentNameLimit} символов.` }), 422);
+    }
+    if (!renameStudent(db, student.id, form.expected, name)) {
+      const current = findStudent(student.id);
+      return current ? c.html(studentNamePage(current, ctx(c), {
+        name, error: 'ФИО уже изменилось. Проверьте текущее имя перед сохранением.',
+      }), 409) : missing(c);
+    }
+    return c.redirect(`/office/students/${student.id}?updated=name`, 303);
+  });
   routes.get('/students/:id/move', c => {
     const student = findStudent(validId(c.req.param('id')));
     if (!student) return missing(c);
     const groups = groupsForOffice(db).filter(group => group.code !== student.group_code);
     const target = academicGroup(db, field(c.req.query('group'), 80));
     const preview = target && target.code !== student.group_code ? target : null;
-    return c.html(movePage(student, groups, preview, coursesToRetain(db, student.group_code, student.id), ctx(c)));
+    const retained = modules.get('plan')?.coursesToRetain(db, student.group_code, student.id);
+    return c.html(movePage(student, groups, preview, retained, ctx(c)));
   });
   routes.post('/students/:id/move', c => {
     const id = validId(c.req.param('id'));

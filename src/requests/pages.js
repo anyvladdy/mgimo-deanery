@@ -1,6 +1,7 @@
 import { html } from 'hono/html';
 import { layout } from '../ui/layout.js';
-import { formatDate } from '../ui/format.js';
+import { presentationVariant } from '../ui/presentation.js';
+import { formatDate, timestamp } from '../ui/format.js';
 import { initialStatus, waitingStatus, clarificationLimit, readyStatus, approvedStatus, rejectedStatus, postponementKind } from './requests.js';
 
 function requestProgress(status) {
@@ -40,14 +41,22 @@ function postponementProgress(request) {
 }
 
 export function requestsPage(requests, available, csrf, student, error = '') {
+  const rich = presentationVariant() !== 'lite';
   const waiting = requests.filter(request => request.status === waitingStatus);
   const submitted = requests.filter(request => request.status !== waitingStatus);
   return layout('Мои заявки', html`
     <main id="content" class="page requests">
       <header class="identity requests-heading">
-        <h1>Мои заявки</h1>
-        ${requests.length ? html`<a href="#new-request">Подать заявку</a>` : ''}
+        <div>
+          <h1>Мои заявки</h1>
+          ${rich ? html`<p class="design-request-intro" hidden>Здесь можно подать заявку в учебный офис и проверить её статус.</p>` : ''}
+        </div>
+        ${requests.length ? html`<a${rich ? html` class="design-request-fallback"` : ''} href="#new-request">Подать заявку</a>` : ''}
       </header>
+      ${rich ? html`<nav class="design-request-types" aria-label="Новые заявки в учебный офис" hidden>
+        <a class="button-link primary" href="#request-certificate">Заказать справку об обучении</a>
+        ${available ? html`<a class="button-link secondary" href="#request-postpone">Перенести дисциплину</a>` : ''}
+      </nav>` : ''}
       ${waiting.length ? html`<section class="request-progress request-attention" aria-labelledby="request-attention-title">
         <h2 id="request-attention-title">${waitingStatus}</h2>
         <ul role="list">
@@ -73,7 +82,7 @@ export function requestsPage(requests, available, csrf, student, error = '') {
       <section id="new-request" class="request-target" aria-labelledby="new-request-title" tabindex="-1">
         <h2 id="new-request-title">Новая заявка</h2>
         <div class="request-actions">
-          <section>
+          <section id="request-certificate" tabindex="-1">
             <h3>Получить справку</h3>
             <p>Когда справка будет готова, её можно забрать в деканате.</p>
             <form method="post" action="/requests">
@@ -81,7 +90,7 @@ export function requestsPage(requests, available, csrf, student, error = '') {
               <button class="primary">Запросить справку</button>
             </form>
           </section>
-          <section>
+          ${available ? html`<section id="request-postpone" tabindex="-1">
             <h3>Перенос дисциплины</h3>
             <p>Заявление о переносе обязательной дисциплины на следующий учебный год.</p>
             ${available.length ? html`<form method="post" action="/requests/postpone">
@@ -99,7 +108,7 @@ export function requestsPage(requests, available, csrf, student, error = '') {
               ${error ? html`<p class="error" role="alert" tabindex="-1" autofocus>${error}</p>` : ''}
               <p class="hint">Сейчас нет дисциплин, доступных для переноса.</p>
             `}
-          </section>
+          </section>` : ''}
         </div>
       </section>
       ${!requests.length ? html`<section aria-labelledby="submitted-requests-title">
@@ -127,7 +136,7 @@ export function clarificationHistory(cycles) {
     </section>` : '';
 }
 
-export function requestPage(request, csrf, student, feedback = null) {
+export function requestPage(request, csrf, student, feedback = null, canSendMessage = false, certificate = null, urgentEnabled = false) {
   const postponement = request.kind === postponementKind;
   const waiting = request.status === waitingStatus;
   const current = waiting ? request.clarifications.at(-1) : null;
@@ -156,10 +165,22 @@ export function requestPage(request, csrf, student, feedback = null) {
         </section>`
         : postponement ? postponementProgress(request) : requestProgress(request.status)}
       ${clarificationHistory(history)}
+      ${certificate ? html`<section class="today-panel" aria-labelledby="certificate-title">
+        <h2 id="certificate-title">Готовая справка</h2>
+        <p>Код проверки <strong>${certificate.verification_code}</strong></p>
+        <div class="office-buttons">
+          <a class="button-link primary" href="/requests/${request.id}/print">Открыть для печати</a>
+          <a class="button-link secondary" href="/verify/${certificate.verification_code}">Проверить справку</a>
+        </div>
+      </section>` : ''}
       <dl>
         <div><dt>Номер заявки</dt><dd>${request.id}</dd></div>
-        <div><dt>Дата подачи</dt><dd>${formatDate(request.created_at)}</dd></div>
+        <div><dt>Дата подачи</dt><dd>${timestamp(request.created_at)}</dd></div>
       </dl>
-      <p><a href="/requests">К моим заявкам</a></p>
+      <div class="section-links">
+        <a href="/requests">К моим заявкам</a>
+        ${canSendMessage ? html`<a href="/messages/new?request=${request.id}">Задать вопрос по заявке</a>` : ''}
+        ${urgentEnabled ? html`<a href="/urgent-appeals?request=${request.id}">Срочное обращение</a>` : ''}
+      </div>
     </main>`, { student, csrf, active: 'requests' });
 }

@@ -33,7 +33,7 @@ async function login(app, account) {
   return cookie(result);
 }
 
-test('Сегодня показывает ближайшую пару, обе аудитории и навигацию', async t => {
+test('Главная показывает ближайшую пару, обе аудитории и навигацию', async t => {
   const db = openDatabase();
   t.after(() => db.close());
   const [mira] = await setupDemo(db);
@@ -43,8 +43,10 @@ test('Сегодня показывает ближайшую пару, обе а
   const response = await get(app, '/', session);
   assert.equal(response.status, 200);
   const page = await response.text();
-  assert.match(page, /Сегодня/);
-  assert.match(page, /Учебный день/);
+  assert.match(page, /<h1>Ближайшие занятия<\/h1>/);
+  assert.match(page, /<title>Ближайшие занятия · Личный кабинет<\/title>/);
+  assert.match(page, /<a class="brand" href="\/">Личный кабинет<\/a>/);
+  assert.match(page, /<h3 id="agenda-2026-11-23">Сегодня /);
   assert.match(page, /Понедельник, 23 ноября 2026/);
   assert.match(page, /Ближайшая пара/);
   assert.match(page, /Английский язык/);
@@ -52,7 +54,7 @@ test('Сегодня показывает ближайшую пару, обе а
   assert.match(page, /Аудитория 307/);
   assert.match(page, /Было 214/);
   assert.match(page, /href="\/schedule\?date=2026-11-23#lesson-101"/);
-  assert.match(page, /class="nav-link is-active" href="\/" aria-current="page">Сегодня/);
+  assert.match(page, /class="nav-link is-active" href="\/" aria-current="page">Ближайшие занятия/);
   assert.match(page, /href="\/schedule"/);
   assert.match(page, /href="\/grades"/);
   assert.match(page, /href="\/requests"/);
@@ -115,7 +117,7 @@ test('Сегодня показывает ближайшую и текущую �
   const app = createApp(db, { ...options, now: () => new Date(instant) });
   const session = await login(app, mira);
   const markSession = await login(app, mark);
-  const today = async (jar = session) => (await get(app, '/', jar)).text();
+  const today = async (jar = session) => (await get(app, '/', `${jar}; deanery_design=lite`)).text();
 
   const before = await today();
   assert.match(before, /Ближайшая пара[\s\S]*Английский язык/);

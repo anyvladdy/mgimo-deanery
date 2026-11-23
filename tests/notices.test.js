@@ -41,7 +41,7 @@ test('перенос и объявления относятся к группе,
 
   db.prepare('DELETE FROM plan_choice_groups WHERE block_id = ? AND group_code = ?').run(12, 'Э-11');
   const changedGroupAccess = await (await get('/notices', b)).text();
-  assert.match(changedGroupAccess, /<h2>До 27 ноября[^<]*Аналитика и данные/);
+  assert.match(changedGroupAccess, /<h3>До 27 ноября[^<]*Аналитика и данные/);
   assert.doesNotMatch(changedGroupAccess, /\/plan#choice-12/);
 
   assert.equal((await post('/notices/read', b, { _csrf: csrf(foreign), kind: 'room', event: 1 })).status, 404);

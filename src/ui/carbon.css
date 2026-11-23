@@ -1,0 +1,607 @@
+@media screen {
+  :root {
+    --page: #f2f5fa;
+    --surface: #fff;
+    --layer: #f7f9fc;
+    --line: #dbe3ef;
+    --text: #182438;
+    --muted: #526176;
+    --control: #738196;
+    --brand: #0066cc;
+    --on-brand: #fff;
+    --brand-hover: #0059b3;
+    --brand-pressed: #004b96;
+    --soft: #eaf3ff;
+    --soft-ink: #0055ac;
+    --attention: #fcf4d6;
+    --attention-ink: #594800;
+    --warning-rule: #f1c21b;
+    --positive: #defbe6;
+    --positive-ink: #0e6027;
+    --error: #fff1f1;
+    --error-ink: #a2191f;
+    --focus: #0071e3;
+    --track: #e6edf7;
+    --radius: .625rem;
+    --radius-card: .875rem;
+    --radius-feature: 1.25rem;
+    --radius-pill: 999px;
+    --display: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --container: 90rem;
+    --gutter: clamp(1rem, 3vw, 3rem);
+    --edge: max(var(--gutter), calc((100vw - var(--container)) / 2 + var(--gutter)));
+    font-family: var(--display);
+    color-scheme: light;
+  }
+
+  :root[data-theme="dark"] {
+    --page: #111822;
+    --surface: #1b2534;
+    --layer: #222e40;
+    --line: #354459;
+    --text: #f2f6fc;
+    --muted: #bbc7d9;
+    --control: #8697af;
+    --brand: #62aeff;
+    --on-brand: #141418;
+    --brand-hover: #90c6ff;
+    --brand-pressed: #afd7ff;
+    --soft: #223750;
+    --soft-ink: #a9d3ff;
+    --attention: #30291a;
+    --attention-ink: #fddc69;
+    --positive: #132b1b;
+    --positive-ink: #a7f0ba;
+    --error: #3a1b1e;
+    --error-ink: #ffb3b8;
+    --track: #29384d;
+    --focus: #8fc7ff;
+    color-scheme: dark;
+  }
+
+  body {
+    max-width: none;
+    padding: 0;
+    font-size: 1rem;
+    line-height: 1.5;
+  }
+  a:hover { color: var(--soft-ink); }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  h1 {
+    font-size: clamp(1.875rem, 1.4rem + 1.5vw, 2.75rem);
+    font-weight: 650;
+    line-height: 1.15;
+    letter-spacing: -.025em;
+    text-wrap: balance;
+  }
+  h2 { font-weight: 600; line-height: 1.2; letter-spacing: -.012em; }
+  h3 { font-weight: 600; }
+  label { font-weight: 400; }
+
+  .mast {
+    width: 100%;
+    max-width: none;
+    min-height: 4rem;
+    padding: .25rem var(--edge);
+    gap: .25rem 1.5rem;
+    background: var(--surface);
+  }
+  .mast.student-mast { gap: 0; }
+  .mast .mast-identity:has(.theme-switch-form) {
+    display: flex;
+    justify-content: space-between;
+    column-gap: 1rem;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    min-height: 3rem;
+    font-size: 1.125rem;
+    font-weight: 600;
+    letter-spacing: 0;
+  }
+  .brand::before {
+    width: .75rem;
+    height: .75rem;
+    flex: none;
+    border-radius: .3125rem;
+    background: var(--brand);
+    content: '';
+  }
+  .office-mast .brand { flex-wrap: wrap; gap: .25rem .75rem; }
+  .account-name { font-size: .875rem; font-weight: 600; }
+  .nav-link { min-height: 2.75rem; font-weight: 400; }
+  .nav-link.is-active {
+    background: var(--soft);
+    box-shadow: none;
+    color: var(--soft-ink);
+    font-weight: 600;
+  }
+  .tagline { min-height: 3rem; }
+  body:has(> .design-rail) .student-navigation,
+  body:has(> .design-rail) .student-mast > .mobile-navigation { display: none; }
+
+  .design-rail[hidden] {
+    display: grid;
+    gap: .25rem;
+    min-width: 0;
+    margin: 1rem var(--edge) 0;
+    padding: .5rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-card);
+    background: var(--surface);
+    font-size: .9375rem;
+  }
+  .design-nav-group { min-width: 0; }
+  .design-nav-group + .design-nav-group {
+    padding-block-start: .25rem;
+    border-block-start: 1px solid var(--line);
+  }
+  .design-nav-group summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .5rem;
+    min-height: 2.75rem;
+    padding: .5rem .75rem;
+    border-radius: var(--radius);
+    color: var(--text);
+    font-weight: 600;
+    list-style: none;
+    cursor: pointer;
+  }
+  .design-nav-group summary::-webkit-details-marker { display: none; }
+  .design-nav-group summary::after {
+    width: .5rem;
+    height: .5rem;
+    flex: none;
+    margin-inline-end: .25rem;
+    border-inline-end: 2px solid currentColor;
+    border-block-end: 2px solid currentColor;
+    color: var(--muted);
+    content: '';
+    transform: translateY(-.125rem) rotate(45deg);
+  }
+  .design-nav-group[open] summary::after { transform: translateY(.125rem) rotate(225deg); }
+  .design-nav-group summary:hover, .design-links a:hover { background: var(--track); color: var(--text); }
+  .design-nav-group summary:active, .design-links a:active { background: var(--soft); }
+  .design-links { display: flex; flex-wrap: wrap; gap: .25rem; margin: 0; padding: 0; list-style: none; }
+  .design-links li { min-width: 0; }
+  .design-links a {
+    display: flex;
+    align-items: center;
+    min-height: 2.75rem;
+    padding: .5rem .75rem;
+    border-radius: var(--radius);
+    color: var(--muted);
+    text-decoration: none;
+    overflow-wrap: anywhere;
+  }
+  .design-links a[aria-current="page"] {
+    background: var(--soft);
+    color: var(--soft-ink);
+    font-weight: 600;
+  }
+  .design-nav-group .design-links {
+    margin-inline-start: .75rem;
+    padding: .25rem .25rem .5rem .5rem;
+    border-inline-start: 1px solid var(--line);
+  }
+  .design-nav-group:not([open]) > .design-links { display: none; }
+
+  .prototype-note {
+    width: auto;
+    margin: .75rem var(--edge) 0;
+    color: var(--muted);
+    font-size: .75rem;
+  }
+  .page {
+    width: auto;
+    max-width: none;
+    margin: clamp(1.5rem, 3vw, 2.75rem) var(--edge) clamp(2rem, 5vw, 4rem);
+    min-width: 0;
+  }
+  .page.narrow > * { max-width: 45rem; }
+  .page:is(.messages-page, .office-detail, .deadlines) { max-width: 58rem; }
+  .identity { margin-bottom: 2rem; }
+  .eyebrow, .today-head p {
+    margin-bottom: .5rem;
+    color: var(--muted);
+    font-size: .875rem;
+    font-weight: 400;
+    letter-spacing: .16px;
+    text-transform: none;
+  }
+  .today-head h1 { font-size: clamp(1.875rem, 1.4rem + 1.5vw, 2.75rem); }
+  .today-head { margin-bottom: 1.5rem; }
+  .today-main, .today-side { gap: 1.25rem; }
+  .next-lesson {
+    --surface: #13294a;
+    --layer: #1c365c;
+    --text: #f2f6fc;
+    --muted: #cad9ed;
+    --line: #395175;
+    --control: #839ab9;
+    --brand: #62aeff;
+    --on-brand: #141418;
+    --brand-hover: #90c6ff;
+    --brand-pressed: #afd7ff;
+    --soft: #263f63;
+    --soft-ink: #b6d8ff;
+    --attention: #473920;
+    --attention-ink: #ffdf97;
+    --focus: #8fc7ff;
+    padding: clamp(1.25rem, 3vw, 2rem);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-feature);
+    background: var(--surface);
+    color: var(--text);
+  }
+  .lesson-heading { font-size: .875rem; font-weight: 400; color: var(--muted); }
+  .next-lesson .lesson-time {
+    font-size: clamp(2rem, 4.5vw, 3.75rem);
+    font-weight: 600;
+    line-height: 1.08;
+    letter-spacing: -.03em;
+  }
+  .lesson-subject { font-size: clamp(1.5rem, 3vw, 2rem); }
+  .next-lesson :is(.lesson-time span, .lesson-teacher, .room-old, .state) { font-family: inherit; }
+  .next-lesson :is(.lesson-time span, .lesson-teacher, .state) { color: var(--muted); font-weight: 400; }
+  .next-lesson .room-old { color: var(--attention-ink); }
+  .lesson-location {
+    margin-block: .5rem;
+    padding: .75rem 1rem;
+    border-radius: var(--radius);
+    background: var(--layer);
+  }
+  .room { font-size: 1.25rem; font-weight: 600; }
+  .today-panel, .day-empty { padding: clamp(1rem, 2vw, 1.5rem); }
+  .request-attention { border-inline-start-color: var(--warning-rule); }
+  .today-panel h2, .lesson-list h2 { font-size: 1.25rem; }
+  .lesson-list {
+    margin-top: 1.25rem;
+    padding: clamp(1rem, 2vw, 1.5rem);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-card);
+    background: var(--surface);
+  }
+  .lesson-list dl { margin-bottom: 0; }
+
+  .page:is(.login, .staff-login) {
+    align-items: center;
+    width: min(calc(100% - 2 * var(--gutter)), 69rem);
+    gap: clamp(1.25rem, 5vw, 5rem);
+    margin: clamp(2.5rem, 7vw, 6rem) auto 4rem;
+  }
+  .login-intro h1 { font-size: clamp(2.375rem, 5vw, 3.5rem); }
+  .login-intro p { margin-bottom: 0; font-size: 1.125rem; }
+  .login-panel {
+    align-content: start;
+    margin: 0;
+    padding: clamp(1.25rem, 3.5vw, 2.5rem);
+    border-radius: var(--radius-feature);
+  }
+  .staff-login .office-banner { padding: 0; border: 0; background: transparent; }
+  .login-panel .primary { width: 100%; justify-content: space-between; }
+  .login-panel .primary::after, .service-catalog .directory-card::after {
+    flex: none;
+    width: .5rem;
+    height: .5rem;
+    border-block-start: 1px solid currentColor;
+    border-inline-end: 1px solid currentColor;
+    transform: rotate(45deg);
+    content: '';
+  }
+
+  button, .button-link {
+    min-height: 3rem;
+    border-radius: var(--radius);
+    padding: .6875rem 1rem;
+    font-size: .9375rem;
+    font-weight: 600;
+    line-height: 1.29;
+  }
+  .quiet-button { padding-inline: .75rem; }
+  :is(button, .button-link).primary, .next-lesson .button-link.primary {
+    border-color: var(--brand);
+    border-radius: var(--radius-pill);
+    background: var(--brand);
+    color: var(--on-brand);
+  }
+  :is(button, .button-link).primary:hover, .next-lesson .button-link.primary:hover {
+    background: var(--brand-hover);
+    color: var(--on-brand);
+  }
+  :is(button, .button-link).primary:active, .next-lesson .button-link.primary:active {
+    background: var(--brand-pressed);
+    color: var(--on-brand);
+  }
+  :is(button, .button-link).secondary, .next-lesson button.secondary {
+    border: 1px solid var(--control);
+    border-radius: var(--radius-pill);
+    background: var(--surface);
+    color: var(--brand);
+  }
+  :is(button, .button-link).secondary:hover, .next-lesson button.secondary:hover {
+    background: var(--soft);
+    color: var(--soft-ink);
+  }
+  .next-lesson :focus-visible { outline-color: var(--focus); }
+  input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]),
+  :is(.form-panel, .request-actions, .directory-filter) :is(select, textarea) {
+    min-height: 3rem;
+    border: 1px solid var(--control);
+    border-radius: var(--radius);
+    background: var(--layer);
+    padding: .6875rem 1rem;
+  }
+  input:not([type="hidden"])[aria-invalid="true"],
+  :is(.form-panel, .request-actions, .directory-filter) [aria-invalid="true"] {
+    border-color: var(--error-ink);
+  }
+  .theme-switch { border-radius: var(--radius-pill); }
+
+  .status-pill {
+    border-radius: var(--radius-pill);
+    font-size: .8125rem;
+    font-weight: 600;
+  }
+  .status-pill.is-ready { background: var(--positive); color: var(--positive-ink); }
+  .status-pill.is-new { background: var(--layer); color: var(--soft-ink); }
+  .office-banner { background: var(--surface); border: 1px solid var(--line); color: var(--text); }
+  .office-banner :is(.eyebrow, dt) { color: var(--muted); }
+  .office-banner dl { border-color: var(--line); }
+  .office-banner .button-link:focus-visible { outline-color: var(--focus); }
+
+  .schedule:has(.design-week-tabs) .design-week-link { display: none; }
+  .schedule .directory-title { margin-block-end: 1rem; }
+  .schedule nav:not(.design-week-tabs, .section-links), .schedule #day {
+    padding: clamp(1rem, 2vw, 1.5rem);
+    background: var(--surface);
+  }
+  .schedule nav.section-links:not(.calendar-view) { padding: 0; border: 0; background: transparent; }
+  .schedule nav > h2 { font-size: 1.25rem; }
+  .week-picker { gap: .375rem; }
+  .week-picker a {
+    min-height: 4rem;
+    padding: .375rem .25rem;
+    background: var(--layer);
+  }
+  .design-calendar-days { margin-block: .75rem 0; }
+  .design-day-count { color: var(--muted); font-size: .8125rem; }
+  .week-picker a[aria-current="date"],
+  .section-links a[aria-current="page"],
+  .schedule-actions a[aria-current="page"] {
+    border-color: var(--brand);
+    background: var(--soft);
+    box-shadow: none;
+    color: var(--soft-ink);
+  }
+  .schedule .design-week-tabs[hidden] { display: block; }
+  .schedule .design-week-tabs[hidden], .schedule nav.calendar-view, .grades .section-links {
+    width: fit-content;
+    max-width: 100%;
+    margin-block-end: 1rem;
+    padding: .25rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-card);
+    background: var(--track);
+  }
+  :is(.design-week-tabs, .calendar-view, .grades .section-links) a {
+    color: var(--muted);
+    text-decoration: none;
+  }
+  :is(.design-week-tabs, .calendar-view, .grades .section-links) a:hover {
+    background: var(--layer);
+    color: var(--text);
+  }
+  :is(.design-week-tabs, .calendar-view, .grades .section-links) a[aria-current="page"] {
+    background: var(--surface);
+    box-shadow: inset 0 0 0 1px var(--line);
+    color: var(--soft-ink);
+  }
+  .calendar .calendar-day {
+    padding: 1rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-card);
+    background: var(--surface);
+  }
+  .calendar .calendar-day.is-empty { padding: .75rem 1rem; }
+  .calendar-day:has(h2:target) { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .calendar-month-cell a { background: var(--layer); }
+
+  .grade-overview dd { font-weight: 650; }
+  .grade-overview > div:first-child dd { color: var(--soft-ink); }
+  .grades .grade-results, .study-plan .plan-courses {
+    max-inline-size: none;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-card);
+    background: var(--surface);
+    padding-inline: clamp(.75rem, 2vw, 1.25rem);
+  }
+  :is(.grades .grade-results, .study-plan .plan-courses) > div:last-child { border-block-end: 0; }
+
+  .directory-card { padding: 1rem 1.25rem; }
+  .service-catalog {
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 14rem), 1fr));
+    max-inline-size: none;
+  }
+  .service-catalog .directory-card {
+    min-height: 5rem;
+    align-items: center;
+    justify-content: space-between;
+    column-gap: .75rem;
+    font-size: 1rem;
+    font-weight: 600;
+  }
+  .service-catalog .directory-card:hover { background: var(--layer); }
+  .office-records li, .message-inbox, .conversation-history { overflow-wrap: anywhere; }
+
+  .site-footer {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: .5rem 1.5rem;
+    width: 100%;
+    padding: 1.25rem var(--edge);
+    border-block-start: 1px solid var(--line);
+    background: var(--page);
+    color: var(--muted);
+  }
+  .site-footer :is(.prototype-note, .design-control) { width: auto; margin: 0; }
+  .skip { inset-inline-start: var(--gutter); }
+
+  @media (min-width: 54rem) {
+    html:has(.student-mast) { scroll-padding-block-start: 5rem; }
+    .mast.student-mast { position: sticky; inset-block-start: 0; z-index: 2; }
+    .skip { z-index: 3; }
+    body:has(> .design-rail) {
+      display: grid;
+      grid-template: 'mast mast mast mast' auto 'notice notice notice notice' auto
+        '. rail main .' 1fr 'foot foot foot foot' auto /
+        minmax(var(--gutter), 1fr) clamp(12rem, 17vw, 14rem)
+        minmax(0, calc(var(--container) - 14rem - 2 * var(--gutter))) minmax(var(--gutter), 1fr);
+    }
+    body:has(> .design-rail) > .mast { grid-area: mast; }
+    body:has(> .design-rail) > .prototype-note { grid-area: notice; }
+    body:has(> .design-rail) > .page {
+      grid-area: main;
+      margin-inline: clamp(1.25rem, 2.6vw, 2.5rem) 0;
+    }
+    body:has(> .design-rail) > .site-footer { grid-area: foot; }
+    .design-rail[hidden] {
+      grid-area: rail;
+      align-self: start;
+      margin: clamp(1.5rem, 3vw, 2.75rem) 0 0;
+    }
+    .design-nav-group .design-links { display: grid; }
+    .login { grid-template-columns: minmax(0, 1.2fr) minmax(18rem, .8fr); }
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .design-nav-group summary, .design-links a { transition: background-color 140ms, color 140ms; }
+    .design-nav-group summary::after { transition: transform 140ms; }
+  }
+
+  @media (width < 42rem) {
+    .mast { padding-inline: var(--gutter); }
+    .mast .mast-identity:has(.theme-switch-form) { gap: 0 .5rem; }
+    .student-mast .account { flex-wrap: wrap; justify-content: flex-start; gap: 0 .25rem; }
+    .mast .account-name { max-width: none; }
+    .nav-link, .design-links a { font-size: .875rem; }
+    .site-footer { padding-inline: var(--gutter); }
+  }
+}
+
+@media screen {
+  .design-header-tools[hidden] { display: flex; flex-wrap: wrap; gap: .25rem; }
+  .design-header-tools a { min-height: 2.75rem; color: var(--soft-ink); }
+  .design-agenda[hidden] { display: grid; gap: 1rem; align-content: start; }
+  .design-agenda > header { justify-content: space-between; }
+  .design-agenda > header h2 { margin: 0; }
+  .today .design-agenda-fallback,
+  .study-plan .design-plan-choice-inline,
+  .discipline .design-discipline-fallback,
+  .requests-heading .design-request-fallback,
+  .service-catalog .design-service-fallback,
+  .schedule:not(.calendar) .schedule-inline-separator { display: none; }
+
+  .design-agenda-day {
+    display: grid;
+    gap: .75rem;
+    padding: clamp(.85rem, 2vw, 1.25rem);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-card);
+    background: var(--surface);
+  }
+  .design-agenda-day h3 {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: .35rem .75rem;
+    margin: 0;
+    font-size: 1.05rem;
+  }
+  .design-agenda-day h3 time { color: var(--muted); font-size: .85rem; font-weight: 400; }
+  .design-agenda-day > p { margin: 0; }
+  .design-agenda-day ul { display: grid; gap: .5rem; margin: 0; padding: 0; }
+  .design-agenda-lesson {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: .45rem 1rem;
+    padding: .75rem;
+    border-radius: var(--radius);
+    background: var(--layer);
+    overflow-wrap: anywhere;
+    list-style: none;
+  }
+  .design-agenda-lesson[data-phase="next"], .design-agenda-lesson[data-phase="current"] { background: var(--soft); }
+  .design-agenda-time { margin: .6rem 0 0; color: var(--brand); font-weight: 650; }
+  .design-agenda-time span { display: block; color: var(--muted); font-size: .8125rem; font-weight: 400; }
+  .design-agenda-info p { margin: 0; }
+  .design-agenda-info p + p, .design-agenda-info form { margin-top: .35rem; }
+  .design-agenda-info .room-old { margin-inline-start: .35rem; }
+  .design-agenda-subject { display: inline-flex; align-items: center; min-height: 2.75rem; font-weight: 650; }
+  .design-agenda-status { display: flex; flex-wrap: wrap; grid-column: 2; gap: .3rem; }
+  .design-home-news[hidden] { display: grid; }
+  .design-home-news p { margin-block-end: .25rem; }
+  .design-home-news .back-link { justify-self: start; }
+
+  .design-plan-choice-preview[hidden], .design-request-intro[hidden] { display: block; }
+  .design-plan-choice-preview:where(a)[hidden] { display: inline-flex; }
+  .design-plan-choice-preview p { margin: .5rem 0 .35rem; }
+  .design-request-intro { margin: .35rem 0 0; color: var(--muted); }
+  .design-request-types[hidden] { display: flex; flex-wrap: wrap; gap: .5rem; margin-block: 0 1rem; }
+  .requests :is(#request-certificate, #request-postpone):target { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+  .design-discipline-facts[hidden] {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
+    gap: .5rem;
+    max-width: 45rem;
+    border: 0;
+    margin-block: .75rem 0;
+  }
+  .design-discipline-facts > div {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-content: start;
+    gap: .2rem;
+    padding: .75rem;
+    border: 0;
+    border-radius: var(--radius);
+    background: var(--surface);
+    overflow-wrap: anywhere;
+  }
+
+  .design-calendar-deadlines[hidden] { display: flex; flex-wrap: wrap; align-items: start; gap: .5rem 1rem; margin-block: .5rem 1.25rem; }
+  .design-calendar-deadlines details { min-width: min(100%, 22rem); max-width: 100%; padding: .25rem .85rem; }
+  .design-calendar-deadlines summary { min-height: 2.75rem; padding-block: .6rem; cursor: pointer; font-weight: 600; }
+  .design-calendar-deadlines details .form-panel { padding-block: .25rem .75rem; }
+  .service-catalog .design-service-full[hidden] { display: flex; }
+
+  .schedule:not(.calendar) :is(#day, .schedule-week-day) dl { display: grid; gap: .5rem; border: 0; }
+  .schedule:not(.calendar) :is(#day, .schedule-week-day) dl > div {
+    border: 0;
+    padding: .85rem;
+    border-radius: var(--radius);
+    background: var(--layer);
+  }
+  .schedule:not(.calendar) .schedule-week-day { padding-block: .35rem; }
+  .schedule:not(.calendar) :is(.schedule-teacher, .schedule-current-room) { display: block; }
+  .schedule:not(.calendar) .schedule-teacher { color: var(--muted); font-weight: 400; }
+
+  @media (width < 42rem) {
+    .mast .mast-identity:has(.design-header-tools) {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 0;
+    }
+    .mast-identity:has(.design-header-tools) > .brand { align-self: flex-start; min-height: 2.5rem; }
+    .design-header-tools { flex-basis: 100%; }
+    .schedule:not(.calendar) :is(#day, .schedule-week-day) dl > div { grid-template-columns: minmax(0, 1fr); }
+    .schedule:not(.calendar) :is(#day, .schedule-week-day) dl dd { margin-inline-start: 0; }
+  }
+}

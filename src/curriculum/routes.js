@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { academicGroup } from '../registry/registry.js';
+import { modulesFor } from '../modules/config.js';
 import { messagePage } from '../ui/layout.js';
 import { curriculumIndex, versionsForGroup, createDraft, curriculumDetails, editCurriculumCourse, publishCurriculum } from './curriculum.js';
 import { curriculumPage, groupCurriculumPage, versionPage } from './pages.js';
@@ -9,6 +9,7 @@ const validId = raw => /^[1-9]\d*$/.test(raw) && Number.isSafeInteger(Number(raw
 
 export function curriculumRoutes(db) {
   const routes = new Hono();
+  const modules = modulesFor(db);
   const missing = c => c.html(messagePage('Учебный план не найден', 'Выберите группу или версию в списке.',
     '/office/curriculum', 'Учебные планы', ctx(c)), 404);
   const render = (c, id, error = '', status = 200) => {
@@ -17,7 +18,7 @@ export function curriculumRoutes(db) {
   };
   routes.get('/', c => c.html(curriculumPage(curriculumIndex(db), ctx(c))));
   routes.get('/groups/:code', c => {
-    const group = academicGroup(db, c.req.param('code'));
+    const group = modules.get('registry').academicGroup(db, c.req.param('code'));
     return group ? c.html(groupCurriculumPage(group, versionsForGroup(db, group.code), ctx(c))) : missing(c);
   });
   routes.post('/groups/:code/draft', c => {
@@ -48,7 +49,9 @@ export function curriculumRoutes(db) {
     if (result === 'ok') return c.redirect(`/office/curriculum/${id}`, 303);
     if (result === 'missing') return missing(c);
     const message = result === 'empty' ? 'Добавьте хотя бы одну дисциплину перед публикацией.'
-      : result === 'gradebook' ? 'По удаляемой дисциплине открыта ведомость. Завершите её перед публикацией.'
+      : result === 'gradebook' ? (modules.has('gradebook')
+        ? 'По удаляемой дисциплине открыта ведомость. Завершите её перед публикацией.'
+        : 'По удаляемой дисциплине открыта ведомость. Подключите ведомости, чтобы завершить её.')
         : result === 'debt' ? 'По удаляемой дисциплине есть задолженность. Сначала закройте её пересдачей.'
           : 'Версия изменилась. Проверьте актуальный список изменений перед публикацией.';
     return render(c, id, message, 409);

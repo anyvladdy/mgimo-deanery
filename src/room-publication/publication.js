@@ -1,3 +1,5 @@
+import { modulesFor } from '../modules/config.js';
+import { schoolNow } from '../modules/clock.js';
 import { writeTransaction } from '../db/write.js';
 
 export const maxRoomLength = 60;
@@ -35,11 +37,15 @@ export function publishRoom(db, lessonId, staffId, room) {
       return { outcome: normalizeRoom(lesson.new_room) === room ? 'published' : 'conflict', lesson };
     }
     if (normalizeRoom(lesson.scheduled_room) === room) return { outcome: 'unchanged', lesson };
+    const booking = modulesFor(db).get('room-booking');
+    if (booking?.isBooked(db, room, lesson.lesson_date, lesson.starts_at, lesson.ends_at)) {
+      return { outcome: 'booked', lesson };
+    }
 
     const inserted = db.prepare('INSERT INTO room_changes (lesson_id, new_room) VALUES (?, ?)')
       .run(lessonId, room);
     db.prepare('INSERT INTO room_change_publications (change_id, staff_id, published_at) VALUES (?, ?, ?)')
-      .run(inserted.lastInsertRowid, staffId, new Date().toISOString());
+      .run(inserted.lastInsertRowid, staffId, schoolNow().toISOString());
     return { outcome: 'published' };
   });
 }

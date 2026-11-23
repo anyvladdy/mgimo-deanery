@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
-import { gradeOutcome } from '../grades/grades.js';
-import { approvedStatus, postponementKind } from '../requests/requests.js';
+import { modulesFor } from '../modules/config.js';
+import { hasTable } from '../db/sql.js';
 
 const canManageAll = staff => staff.role === 'office' || staff.role === 'admin';
 const courseFields = course => [course.group_code, course.subject, course.assessment];
@@ -11,11 +11,15 @@ const scope = alias => `(? = 1 OR EXISTS (
 ))`;
 const scopeParams = staff => [canManageAll(staff) ? 1 : 0, staff.id];
 
-export function gradebook(db, staff) {
-  const courses = db.prepare(`
+export function coursesForStaff(db, staff) {
+  return db.prepare(`
     SELECT group_code, subject, assessment FROM current_plan_courses p
     WHERE ${scope('p')} ORDER BY group_code, subject
   `).all(...scopeParams(staff));
+}
+
+export function gradebook(db, staff) {
+  const courses = coursesForStaff(db, staff);
   const sheets = db.prepare(`
     SELECT id, group_code, subject, assessment, status, kind FROM grade_sheets s
     WHERE ${scope('s')} ORDER BY id DESC
@@ -43,9 +47,11 @@ export function sheetForStaff(db, staff, id) {
   const sheet = scopedSheet(db, staff, id);
   if (!sheet) return null;
   const rows = sheetRows(db, id);
-  return { ...sheet, rows: sheet.status === 'draft' ? rows.map(row => ({
-    ...row, canExclude: isOutsideSheet(db, sheet, row.student_id, row.group_code),
-  })) : rows };
+  if (sheet.status !== 'draft') return { ...sheet, rows };
+  const postponed = postponedStudents(db, sheet.subject, sheet.assessment);
+  return { ...sheet, rows: rows.map(row => ({
+    ...row, canExclude: isOutsideSheet(db, sheet, row.student_id, row.group_code, postponed),
+  })) };
 }
 
 function write(db, action) {
@@ -66,7 +72,7 @@ function hasRetakeGrounds(db, [group, subject, assessment], studentId) {
     WHERE student_id = ? AND subject = ? AND assessment = ?
     ORDER BY id DESC LIMIT 1
   `).get(studentId, subject, assessment);
-  const { state } = gradeOutcome(latest?.result);
+  const { state } = modulesFor(db).get('grades').gradeOutcome(latest?.result);
   if (state === 'debts') return true;
   if (state !== 'pending') return false;
   return Boolean(db.prepare(`
@@ -77,11 +83,19 @@ function hasRetakeGrounds(db, [group, subject, assessment], studentId) {
   `).get(group, subject, assessment, studentId));
 }
 
-function isOutsideSheet(db, sheet, studentId, currentGroup) {
-  if (db.prepare(`
-    SELECT 1 FROM document_requests r JOIN request_courses c ON c.request_id = r.id
-    WHERE r.student_id = ? AND r.kind = ? AND r.status = ? AND c.subject = ? AND c.assessment = ?
-  `).get(studentId, postponementKind, approvedStatus, sheet.subject, sheet.assessment)) return true;
+// Одобренный перенос продолжает действовать при отключении формы заявок.
+function postponedStudents(db, subject, assessment) {
+  if (!hasTable(db, 'request_courses') || !hasTable(db, 'document_requests')) return new Set();
+  const rows = db.prepare(`
+    SELECT r.student_id FROM document_requests r JOIN request_courses c ON c.request_id = r.id
+    WHERE r.kind = 'Перенос дисциплины' AND r.status = 'Одобрено'
+      AND c.subject = ? AND c.assessment = ?
+  `).all(subject, assessment);
+  return new Set(rows.map(row => row.student_id));
+}
+
+function isOutsideSheet(db, sheet, studentId, currentGroup, postponed) {
+  if (postponed.has(studentId)) return true;
   if (sheet.kind === 'retake' && !hasRetakeGrounds(db, courseFields(sheet), studentId)) return true;
   if (currentGroup === sheet.group_code) return false;
   // Пересдача собирается по основной ведомости, поэтому переведённый студент
@@ -109,16 +123,9 @@ function mergeStudents(...lists) {
   return [...byId.values()].sort((left, right) => left.id - right.id);
 }
 
-function studentsForSheet(db, [group, subject, assessment], kind) {
-  const current = db.prepare(`
-    SELECT s.id
-    FROM students s WHERE s.group_code = ?
-      AND NOT EXISTS (
-        SELECT 1 FROM document_requests r JOIN request_courses c ON c.request_id = r.id
-        WHERE r.student_id = s.id AND r.kind = ? AND r.status = ? AND c.subject = ? AND c.assessment = ?
-      )
-    ORDER BY s.id
-  `).all(group, postponementKind, approvedStatus, subject, assessment);
+function studentsForSheet(db, [group, subject, assessment], kind, postponed) {
+  const current = db.prepare('SELECT id FROM students WHERE group_code = ? ORDER BY id')
+    .all(group).filter(student => !postponed.has(student.id));
   if (kind !== 'retake') return current;
 
   const cohort = db.prepare(`
@@ -128,26 +135,16 @@ function studentsForSheet(db, [group, subject, assessment], kind) {
     JOIN students s ON s.id = r.student_id
     WHERE sh.group_code = ? AND sh.subject = ? AND sh.assessment = ?
       AND sh.kind = 'main' AND sh.status = 'published'
-      AND NOT EXISTS (
-        SELECT 1 FROM document_requests rq JOIN request_courses c ON c.request_id = rq.id
-        WHERE rq.student_id = s.id AND rq.kind = ? AND rq.status = ? AND c.subject = ? AND c.assessment = ?
-      )
     ORDER BY s.id
-  `).all(group, subject, assessment,
-    postponementKind, approvedStatus, subject, assessment);
+  `).all(group, subject, assessment).filter(student => !postponed.has(student.id));
 
   const retained = db.prepare(`
     SELECT s.id
     FROM student_retained_courses rc
     JOIN students s ON s.id = rc.student_id
     WHERE rc.origin_group = ? AND rc.subject = ? AND rc.assessment = ?
-      AND NOT EXISTS (
-        SELECT 1 FROM document_requests rq JOIN request_courses c ON c.request_id = rq.id
-        WHERE rq.student_id = s.id AND rq.kind = ? AND rq.status = ? AND c.subject = ? AND c.assessment = ?
-      )
     ORDER BY s.id
-  `).all(group, subject, assessment,
-    postponementKind, approvedStatus, subject, assessment);
+  `).all(group, subject, assessment).filter(student => !postponed.has(student.id));
   return mergeStudents(cohort.length ? cohort : current, retained);
 }
 
@@ -168,15 +165,15 @@ export function createSheet(db, staff, course, kind) {
       return earlier.kind === kind ? { id: earlier.id } : { error: 'active' };
     }
 
-    const eligible = studentsForSheet(db, course, kind);
+    const eligible = studentsForSheet(db, course, kind, postponedStudents(db, course[1], course[2]));
     const students = kind === 'retake'
       ? eligible.filter(student => hasRetakeGrounds(db, course, student.id))
       : eligible;
     if (!students.length) return { error: 'empty' };
 
     const created = db.prepare(`
-      INSERT INTO grade_sheets (group_code, subject, assessment, kind, created_by)
-      VALUES (?, ?, ?, ?, ?) RETURNING id
+      INSERT INTO grade_sheets (group_code, subject, assessment, kind, created_by, created_at)
+      VALUES (?, ?, ?, ?, ?, deanery_timestamp()) RETURNING id
     `).get(...course, kind, staff.id);
     const add = db.prepare('INSERT INTO grade_sheet_rows (sheet_id, student_id) VALUES (?, ?)');
     for (const student of students) add.run(created.id, student.id);
@@ -200,7 +197,8 @@ export function updateSheetRow(db, staff, sheetId, studentId, attendance, result
       WHERE r.sheet_id = ? AND r.student_id = ?
     `).get(sheetId, studentId);
     if (!student) return 'missing';
-    if ((attendance === 'excluded') !== isOutsideSheet(db, sheet, studentId, student.group_code)) return 'ineligible';
+    const postponed = postponedStudents(db, sheet.subject, sheet.assessment);
+    if ((attendance === 'excluded') !== isOutsideSheet(db, sheet, studentId, student.group_code, postponed)) return 'ineligible';
     const updated = db.prepare(`
       UPDATE grade_sheet_rows SET attendance = ?, result = ? WHERE sheet_id = ? AND student_id = ?
     `).run(attendance, attendance === 'present' ? result || null : null, sheetId, studentId);
@@ -214,9 +212,10 @@ export function publishSheet(db, staff, sheetId) {
     if (!sheet) return 'missing';
     if (sheet.status === 'published') return 'ok';
     const rows = sheetRows(db, sheetId);
+    const postponed = postponedStudents(db, sheet.subject, sheet.assessment);
     if (sheet.kind === 'main') {
       const roster = new Set(rows.map(row => row.student_id));
-      const incoming = studentsForSheet(db, courseFields(sheet), sheet.kind)
+      const incoming = studentsForSheet(db, courseFields(sheet), sheet.kind, postponed)
         .filter(student => !roster.has(student.id));
       if (incoming.length) {
         const add = db.prepare('INSERT INTO grade_sheet_rows (sheet_id, student_id) VALUES (?, ?)');
@@ -227,7 +226,7 @@ export function publishSheet(db, staff, sheetId) {
     if (!rows.length || rows.some(row => !row.attendance || (row.attendance === 'present' && !row.result))) {
       return 'incomplete';
     }
-    if (rows.some(row => (row.attendance === 'excluded') !== isOutsideSheet(db, sheet, row.student_id, row.group_code))) {
+    if (rows.some(row => (row.attendance === 'excluded') !== isOutsideSheet(db, sheet, row.student_id, row.group_code, postponed))) {
       return 'postponed';
     }
     const digest = createHash('sha256')
@@ -245,9 +244,19 @@ export function publishSheet(db, staff, sheetId) {
       }
     }
     db.prepare(`
-      UPDATE grade_sheets SET status = 'published', published_by = ?, published_at = CURRENT_TIMESTAMP, digest = ?
+      UPDATE grade_sheets SET status = 'published', published_by = ?, published_at = deanery_timestamp(), digest = ?
       WHERE id = ?
     `).run(staff.id, digest, sheetId);
     return 'ok';
   });
+}
+
+export function publishedResultsForStudent(db, studentId) {
+  return db.prepare(`
+    SELECT g.id, g.subject, g.result, s.published_at
+    FROM grades g JOIN grade_attempt_details d ON d.grade_id = g.id
+    JOIN grade_sheets s ON s.id = d.sheet_id
+    WHERE g.student_id = ?
+    ORDER BY s.published_at DESC, g.id DESC LIMIT 25
+  `).all(studentId);
 }

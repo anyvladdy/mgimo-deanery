@@ -1,11 +1,10 @@
 import { randomBytes } from 'node:crypto';
-import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
-import { openAppDatabase, syncAcademicGroups } from '../src/db/open.js';
+import { openAppDatabase } from '../src/db/open.js';
 import { passwordRecord } from '../src/account/passwords.js';
 import { demoProfiles } from '../src/account/demo-profiles.js';
 
-const seed = readFileSync(new URL('./seed.sql', import.meta.url), 'utf8');
+import { seedDemoData } from './seed.js';
 
 export async function setupDemo(db, { rotate = false } = {}) {
   const accountByStudent = db.prepare('SELECT login FROM accounts WHERE student_id = ?');
@@ -25,8 +24,7 @@ export async function setupDemo(db, { rotate = false } = {}) {
         throw new Error('Демо-профиль пересекается с существующей учётной записью.');
       }
     }
-    db.exec(seed);
-    syncAcademicGroups(db);
+    seedDemoData(db);
     const issued = [];
     for (const item of prepared) {
       const existing = accountByStudent.get(item.id);

@@ -33,13 +33,17 @@ test('офис рассматривает перенос и готовит сп�
   const guest = await app.request('/office/students', { headers: { 'x-role': 'office' } });
   assert.equal(guest.status, 303);
   assert.equal(guest.headers.get('location'), '/office/login');
+  const entry = await (await app.request('/office/login')).text();
+  assert.match(entry, /<a class="brand" href="\/office\/login">Личный кабинет<\/a>/);
 
   const student = await login(app, '/login', mira, '/');
   const other = await login(app, '/login', mark, '/');
   const staff = await login(app, '/office/login', office, '/office');
   assert.equal((await get(app, '/office/students', student)).status, 403);
   assert.equal((await get(app, '/plan', staff)).headers.get('location'), '/office');
-  assert.match(await (await get(app, '/office', staff)).text(), /Рабочий стол[\s\S]*15/);
+  const officePage = await (await get(app, '/office', staff)).text();
+  assert.match(officePage, /<a class="brand" href="\/office">Личный кабинет <span>Учебный офис<\/span>/);
+  assert.match(officePage, /Рабочий стол[\s\S]*15/);
   const search = await (await get(app, `/office/students?q=${encodeURIComponent('мира')}`, staff)).text();
   assert.match(search, /Мира Луговая/);
   assert.doesNotMatch(search, /Марк Ясный/);

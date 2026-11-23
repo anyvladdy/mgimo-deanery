@@ -1,0 +1,74 @@
+/* Keep printable pages on the base palette. */
+@media screen {
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page: #101915;
+    --surface: #192621;
+    --line: #3A4C44;
+    --text: #EAF3EE;
+    --muted: #B0C4B9;
+    --control: #849E90;
+    --brand: #8BD7C2;
+    --on-brand: #102A22;
+    --soft: #254236;
+    --soft-ink: #B1F1DB;
+    --attention: #49351E;
+    --attention-ink: #F9CE94;
+    --error: #472931;
+    --error-ink: #FFAFBB;
+    --focus: #A9CAFF;
+    --track: #30483E;
+    --on-brand-muted: #24463B;
+  }
+}
+
+@media screen {
+  .mast-identity:has(.theme-switch-form) {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    column-gap: .5rem;
+  }
+
+  .account:has(.theme-switch-form) {
+    flex-wrap: nowrap;
+    justify-content: flex-end;
+  }
+
+  .account .theme-switch-form { flex: none; }
+
+  .theme-switch {
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    justify-items: center;
+    min-block-size: 2.75rem;
+    inline-size: 4.75rem;
+    padding: 0;
+    border: 1px solid var(--control);
+    border-radius: 999px;
+    background: var(--soft);
+    color: var(--muted);
+  }
+
+  .theme-switch::before {
+    content: '';
+    position: absolute;
+    inset-block-start: calc(50% - 1rem);
+    inset-inline-start: .2rem;
+    inline-size: 2rem;
+    block-size: 2rem;
+    border: 1px solid var(--line);
+    border-radius: 50%;
+    background: var(--surface);
+  }
+
+  .theme-switch[aria-checked="true"]::before { inset-inline-start: calc(100% - 2.2rem); }
+  .theme-switch:hover { border-color: var(--brand); }
+  .theme-switch svg { z-index: 1; inline-size: 1rem; block-size: 1rem; }
+  .theme-switch[aria-checked="false"] svg:first-of-type,
+  .theme-switch[aria-checked="true"] svg:last-of-type { color: var(--text); }
+}
+
+@media print {
+  .theme-switch-form { display: none !important; }
+}

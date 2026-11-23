@@ -1,12 +1,21 @@
 import { randomBytes } from 'node:crypto';
 import { passwordRecord } from '../account/passwords.js';
 import { writeTransaction } from '../db/write.js';
-import { retainCourses } from '../plan/retained.js';
+import { retainCourses } from '../db/retained-courses.js';
+import { modulesFor } from '../modules/config.js';
 
 const groupQuery = `
   SELECT g.code, g.program, g.year, p.faculty
   FROM academic_groups g JOIN academic_programs p ON p.name = g.program
 `;
+
+export const studentNameLimit = 120;
+
+export function renameStudent(db, studentId, expected, name) {
+  return db.prepare(`
+    UPDATE students SET full_name = ? WHERE id = ? AND (full_name = ? OR full_name = ?)
+  `).run(name, studentId, expected, name).changes > 0;
+}
 
 export function groupsForOffice(db) {
   return db.prepare(`${groupQuery} ORDER BY g.program, g.year, g.code`).all();
@@ -65,36 +74,10 @@ export async function enrollStudent(db, staffId, name, login, groupCode) {
     `).get(name, group.faculty, group.program, group.year, group.code);
     db.prepare('INSERT INTO accounts (student_id, login, salt, password_hash) VALUES (?, ?, ?, ?)')
       .run(student.id, login, salt, hash);
-    db.prepare('INSERT INTO student_movements (student_id, staff_id, next_group) VALUES (?, ?, ?)')
+    db.prepare('INSERT INTO student_movements (student_id, staff_id, next_group, changed_at) VALUES (?, ?, ?, deanery_timestamp())')
       .run(student.id, staffId, group.code);
     return { studentId: student.id, name, login, password, group };
   });
-}
-
-// Выбор курса принадлежит блоку группы. При переводе блоки, которых нет у новой
-// группы, больше нельзя ни показать, ни отозвать, поэтому освобождаем места и
-// оставляем след в личной истории выбора.
-function dropChoicesOutsideGroup(db, studentId, groupCode) {
-  const orphans = db.prepare(`
-    SELECT pc.block_id, pc.option_id
-    FROM plan_choices pc
-    WHERE pc.student_id = ?
-      AND NOT EXISTS (
-        SELECT 1 FROM plan_choice_groups g
-        WHERE g.block_id = pc.block_id AND g.group_code = ?
-      )
-  `).all(studentId, groupCode);
-  if (!orphans.length) return;
-
-  const remove = db.prepare('DELETE FROM plan_choices WHERE student_id = ? AND block_id = ?');
-  const remember = db.prepare(`
-    INSERT INTO plan_choice_history (student_id, block_id, previous_option, next_option)
-    VALUES (?, ?, ?, NULL)
-  `);
-  for (const choice of orphans) {
-    remove.run(studentId, choice.block_id);
-    remember.run(studentId, choice.block_id, choice.option_id);
-  }
 }
 
 export function moveStudent(db, staffId, studentId, expected, groupCode) {
@@ -105,12 +88,13 @@ export function moveStudent(db, staffId, studentId, expected, groupCode) {
     if (student.group_code === group.code) return 'ok';
     if (student.group_code !== expected) return 'stale';
 
+    const modules = modulesFor(db);
     retainCourses(db, student.group_code, studentId);
-    dropChoicesOutsideGroup(db, studentId, group.code);
     db.prepare('UPDATE students SET group_code = ?, program = ?, faculty = ?, year = ? WHERE id = ?')
       .run(group.code, group.program, group.faculty, group.year, studentId);
+    if (modules.has('electives')) modules.get('plan').reconcileElectives(db, studentId);
     db.prepare(`
-      INSERT INTO student_movements (student_id, staff_id, previous_group, next_group) VALUES (?, ?, ?, ?)
+      INSERT INTO student_movements (student_id, staff_id, previous_group, next_group, changed_at) VALUES (?, ?, ?, ?, deanery_timestamp())
     `).run(studentId, staffId, student.group_code, group.code);
     return 'ok';
   });

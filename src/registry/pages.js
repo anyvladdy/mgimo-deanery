@@ -1,7 +1,9 @@
 import { html } from 'hono/html';
 import { layout } from '../ui/layout.js';
 import { pluralRu } from '../ui/plural.js';
+import { parseTimestamp } from '../modules/clock.js';
 import { formatDate } from '../ui/format.js';
+import { studentNameLimit } from './registry.js';
 
 function page(title, body, context) {
   return layout(title, html`<main id="content" class="page office-page">${body}</main>`, { ...context, active: 'office-registry' });
@@ -22,7 +24,7 @@ function groupOption(group, selected) {
     : html`<option value="${group.code}">${label}</option>`;
 }
 
-export function registryPage(programs, context, error = '') {
+export function registryPage(programs, context, error = '', { curriculum = true } = {}) {
   return page('Программы и группы', html`
     ${heading('Программы и группы')}
     ${errorNote(error)}
@@ -34,7 +36,7 @@ export function registryPage(programs, context, error = '') {
             <h3>${program.name}</h3>
             <p>${program.faculty}</p>
             ${program.groups.length ? html`<ul class="program-groups" role="list">${program.groups.map(group => html`
-              <li><a href="/office/curriculum/groups/${encodeURIComponent(group.code)}">${group.code}</a>
+              <li>${curriculum ? html`<a href="/office/curriculum/groups/${encodeURIComponent(group.code)}">${group.code}</a>` : html`<strong>${group.code}</strong>`}
                 <span>${group.year} курс · ${group.students} ${pluralRu(group.students, 'студент', 'студента', 'студентов')} в группе</span></li>`)}</ul>` : html`<p>Группы пока не добавлены.</p>`}
           </section>`) : html`<p class="section-empty">Добавьте первую программу.</p>`}
       </section>
@@ -112,6 +114,23 @@ export function enrollmentReceipt(student, context) {
     </div>`, context);
 }
 
+export function studentNamePage(student, context, { name = student.full_name, error = '' } = {}) {
+  return page('Изменить ФИО', html`
+    <div class="office-detail">
+      <a class="back-link" href="/office/students/${student.id}">Карточка студента</a>
+      ${heading('Изменить ФИО', student.full_name)}
+      <form class="office-queue form-panel" method="post" action="/office/registry/students/${student.id}/name">
+        <input type="hidden" name="_csrf" value="${context.csrf}">
+        <input type="hidden" name="expected" value="${student.full_name}">
+        ${error ? html`<p class="error" role="alert" id="student-name-error">${error}</p>` : ''}
+        <label for="student-name">ФИО студента</label>
+        <input id="student-name" name="name" maxlength="${studentNameLimit}" value="${name}" required
+          ${error ? html`aria-invalid="true" aria-describedby="student-name-error" autofocus` : ''}>
+        <button class="primary">Сохранить</button>
+      </form>
+    </div>`, context);
+}
+
 export function movePage(student, groups, target, retained, context, error = '') {
   const path = `/office/registry/students/${student.id}/move`;
   return page('Смена группы', html`
@@ -133,9 +152,10 @@ export function movePage(student, groups, target, retained, context, error = '')
         ${target ? html`<div><dt>После перевода</dt><dd>${target.code} · ${target.program} · ${target.year} курс</dd></div>` : ''}
       </dl>
       ${target ? html`<section class="office-queue">
-        <h2>Что перенесётся в личный план</h2>
-        ${retained.length ? html`<ul>${retained.map(course => html`<li>${course.subject} · ${course.credits} з. е.</li>`)}</ul>`
-          : html`<p>В плане появятся обязательные дисциплины новой группы.</p>`}
+        ${retained ? html`<h2>Что перенесётся в личный план</h2>
+          ${retained.length ? html`<ul>${retained.map(course => html`<li>${course.subject} · ${course.credits} з. е.</li>`)}</ul>`
+            : html`<p>В плане появятся обязательные дисциплины новой группы.</p>`}`
+          : html`<h2>Подтверждение перевода</h2>`}
         <form class="form-panel" method="post" action="${path}">
           <input type="hidden" name="_csrf" value="${context.csrf}">
           <input type="hidden" name="expected" value="${student.group_code}">
@@ -154,7 +174,7 @@ export function movementHistory(history, showStaff = false) {
         <strong>${event.previous_group ? `Перевод из ${event.previous_group} в ${event.next_group}` : `Зачисление в ${event.next_group}`}</strong>
         <p>${event.program}${showStaff ? ` · ${event.staff_name}` : ''}</p>
       </div>
-      <time datetime="${event.changed_at.slice(0, 10)}">${formatDate(event.changed_at)}</time>
+      <time datetime="${parseTimestamp(event.changed_at).toISOString()}">${formatDate(event.changed_at)}</time>
     </li>`)}</ul>
   </section>` : '';
 }

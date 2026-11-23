@@ -2,24 +2,29 @@ import { Hono } from 'hono';
 import { matchesPassword } from '../account/passwords.js';
 import { beginLoginAttempt } from '../account/login-throttle.js';
 import { messagePage } from '../ui/layout.js';
-import { officeRequest, officeRequests, reviewRequest, askClarification, clarificationLimit } from '../requests/requests.js';
-import { officeSyllabusRoutes } from '../syllabus/routes.js';
-import { gradebookRoutes } from '../gradebook/routes.js';
-import { registryRoutes } from '../registry/routes.js';
-import { curriculumRoutes } from '../curriculum/routes.js';
-import { roomPublicationRoutes } from '../room-publication/routes.js';
-import { movementsForStudent } from '../registry/registry.js';
-import { planForStudent } from '../plan/plan.js';
-import { officeLogin, officeHome, officeDirectory, officeStudent, officeInbox, officeRequestPage } from './pages.js';
+import { modulesFor } from '../modules/config.js';
+import { officeLogin, officeHome, officeDirectory, officeStudent, teacherHome } from './pages.js';
 
 const officeRoles = new Set(['office', 'admin']);
-const staffRoles = new Set([...officeRoles, 'teacher']);
+const staffRoles = new Set([...officeRoles, 'teacher', 'leadership']);
 const context = c => ({ staff: c.get('staff'), csrf: c.get('csrfToken') });
 const cleanQuery = value => String(value ?? '').trim().slice(0, 100);
 const idFrom = value => /^[1-9]\d*$/.test(value) && Number.isSafeInteger(Number(value)) ? Number(value) : 0;
 
-export function officeRoutes(db, session) {
+export function officeRoutes(db, session, officeMounts = []) {
   const routes = new Hono();
+  const modules = modulesFor(db);
+  const teacherMounts = officeMounts.filter(mount => mount.teachers);
+  const leadershipMounts = officeMounts.filter(mount => mount.leadership);
+  const leadershipLanding = leadershipMounts[0] ? `/office${leadershipMounts[0].path}` : '/office';
+  const teacherLanding = teacherMounts[0] ? `/office${teacherMounts[0].path}` : '/office';
+  const registry = modules.get('registry');
+  const plan = modules.get('plan');
+  const cards = [
+    { path: '/students', label: 'Контингент', description: plan
+      ? 'Студенты, программы и индивидуальные планы' : 'Студенты и группы', order: 40 },
+    ...officeMounts.filter(mount => mount.dashboard).map(mount => ({ ...mount.dashboard, path: mount.path })),
+  ].sort((left, right) => left.order - right.order);
   routes.get('/login', async c => {
     if (c.get('staff')) return c.redirect('/office', 303);
     if (!c.get('csrfToken')) await session.issue(c, null);
@@ -63,62 +68,41 @@ export function officeRoutes(db, session) {
     session.logout(c);
     return c.redirect('/office/login', 303);
   });
-  routes.route('/gradebook', gradebookRoutes(db));
+  const unavailable = c => {
+    const leader = c.get('staff').role === 'leadership';
+    return c.html(messagePage('Раздел учебного офиса', 'Откройте доступный вам раздел кабинета.',
+      leader ? leadershipLanding : teacherLanding,
+      leader ? 'К кабинету руководителя' : 'К кабинету преподавателя', context(c)), 403);
+  };
+  for (const mount of officeMounts.filter(mount => mount.teachers || mount.leadership)) {
+    const scoped = new Hono();
+    scoped.use('*', (c, next) => {
+      const { role } = c.get('staff');
+      const allowed = officeRoles.has(role) || (role === 'teacher' && mount.teachers)
+        || (role === 'leadership' && mount.leadership);
+      return allowed ? next() : unavailable(c);
+    });
+    scoped.route('/', mount.routes);
+    routes.route(mount.path, scoped);
+  }
   routes.get('/', c => {
-    if (c.get('staff').role === 'teacher') return c.redirect('/office/gradebook', 303);
-    const totals = db.prepare('SELECT COUNT(*) AS students, COUNT(DISTINCT group_code) AS groups FROM students').get();
-    const pending = officeRequests(db);
-    return c.html(officeHome(totals, pending, context(c)));
-  });
-  routes.use('*', async (c, next) => {
-    if (!officeRoles.has(c.get('staff').role)) {
-      return c.html(messagePage('Раздел учебного офиса', 'Преподавателю доступны ведомости назначенных дисциплин.',
-        '/office/gradebook', 'К ведомостям', context(c)), 403);
+    if (c.get('staff').role === 'leadership') {
+      return leadershipMounts.length ? c.redirect(leadershipLanding, 303)
+        : c.html(messagePage('Кабинет руководителя', 'Разделы для руководителей сейчас отключены.',
+          '/office/login', 'Ко входу', context(c)));
     }
-    await next();
+    if (c.get('staff').role === 'teacher') {
+      if (teacherMounts.length) return c.redirect(teacherLanding, 303);
+      return c.html(teacherHome(context(c)));
+    }
+    const totals = db.prepare('SELECT COUNT(*) AS students, COUNT(DISTINCT group_code) AS groups FROM students').get();
+    const pending = modules.get('request-review')?.requestQueue(db);
+    const recoveries = modules.get('recovery')?.pendingRecoveries(db) ?? 0;
+    return c.html(officeHome({ ...totals, recoveries }, pending, cards, context(c)));
   });
-  routes.get('/requests', c => {
-    const requested = c.req.query('view');
-    const view = ['waiting', 'closed'].includes(requested) ? requested : 'pending';
-    return c.html(officeInbox(officeRequests(db, view), view, context(c)));
-  });
+  routes.use('*', (c, next) => officeRoles.has(c.get('staff').role) ? next() : unavailable(c));
   const missing = c => c.html(messagePage('Запись не найдена', 'Проверьте адрес или вернитесь к рабочему столу.',
     '/office', 'К рабочему столу', context(c)), 404);
-  routes.get('/requests/:id', c => {
-    const request = officeRequest(db, idFrom(c.req.param('id')));
-    return request ? c.html(officeRequestPage(request, context(c))) : missing(c);
-  });
-  routes.post('/requests/:id/clarify', c => {
-    const id = idFrom(c.req.param('id'));
-    const { question, cycle } = c.get('form');
-    const outcome = askClarification(db, c.get('staff').id, id, question, cycle);
-    if (outcome === 'ok') return c.redirect(`/office/requests/${id}`, 303);
-    if (outcome === 'missing') return missing(c);
-    const request = officeRequest(db, id);
-    const error = outcome === 'stale'
-      ? 'Заявка уже изменилась. Проверьте её статус и историю уточнений.'
-      : `Введите вопрос длиной до ${clarificationLimit} знаков.`;
-    const draft = typeof question === 'string' ? question.slice(0, clarificationLimit) : '';
-    return c.html(officeRequestPage(request, context(c), error, '', draft), outcome === 'stale' ? 409 : 422);
-  });
-  routes.post('/requests/:id/review', c => {
-    const id = idFrom(c.req.param('id'));
-    const { action, comment, cycle } = c.get('form');
-    const note = typeof comment === 'string' && comment.length <= 500 ? comment.trim() : '';
-    const outcome = typeof comment !== 'undefined' && (typeof comment !== 'string' || comment.length > 500)
-      ? 'invalid' : reviewRequest(db, c.get('staff').id, id, action, note, cycle);
-
-    if (outcome === 'ok' || outcome === 'reviewed') return c.redirect(`/office/requests/${id}`, 303);
-    const request = officeRequest(db, id);
-    if (!request) return missing(c);
-    const errors = {
-      waiting: 'Дождитесь ответа студента, чтобы вынести решение.',
-      stale: 'Заявка уже изменилась. Ознакомьтесь с последним ответом перед решением.',
-      ineligible: 'У дисциплины появился результат или она больше не входит в план. Укажите причину и отклоните перенос.',
-    };
-    const error = errors[outcome] ?? 'Проверьте действие. Для отказа нужен комментарий до 500 знаков.';
-    return c.html(officeRequestPage(request, context(c), error, note), errors[outcome] ? 409 : 422);
-  });
   routes.get('/students', c => {
     const search = cleanQuery(c.req.query('q'));
     const group = cleanQuery(c.req.query('group'));
@@ -130,17 +114,20 @@ export function officeRoutes(db, session) {
     `).all(group, group).filter(row => row.full_name.toLocaleLowerCase('ru').includes(search.toLocaleLowerCase('ru')));
     const page = Math.max(1, Math.min(idFrom(c.req.query('page')) || 1, Math.ceil(roster.length / 30)));
     const rows = roster.slice((page - 1) * 30, page * 30);
-    return c.html(officeDirectory(rows, { groups, search, group, page, total: roster.length }, context(c)));
+    return c.html(officeDirectory(rows, { groups, search, group, page, total: roster.length }, context(c), Boolean(registry)));
   });
   routes.get('/students/:id', c => {
     const student = db.prepare('SELECT * FROM students WHERE id = ?').get(idFrom(c.req.param('id')));
     if (!student) return missing(c);
-    return c.html(officeStudent(student, planForStudent(db, student.id), movementsForStudent(db, student.id), context(c)));
+    return c.html(officeStudent(student, plan?.planForStudent(db, student.id), context(c), {
+      history: registry?.movementHistory(registry.movementsForStudent(db, student.id), true),
+      registryEnabled: Boolean(registry),
+      nameUpdated: registry && c.req.query('updated') === 'name',
+    }));
   });
-  routes.route('/schedule', roomPublicationRoutes(db));
-  routes.route('/registry', registryRoutes(db));
-  routes.route('/curriculum', curriculumRoutes(db));
-  routes.route('/syllabuses', officeSyllabusRoutes(db));
-  routes.all('*', missing);
+  for (const mount of officeMounts.filter(mount => !mount.teachers && !mount.leadership)) routes.route(mount.path, mount.routes);
+  routes.all('*', c => c.html(messagePage('Страница не найдена',
+    'Раздел может быть отключён. Доступные разделы есть в меню учебного офиса.',
+    '/office', 'К рабочему столу', context(c)), 404));
   return routes;
 }
