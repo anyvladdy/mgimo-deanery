@@ -1,0 +1,18 @@
+# Локальные зависимости и данные
+node_modules/
+var/
+*.sqlite
+*.sqlite-*
+*.db
+*.bundle
+*.log
+journal/*.sqlite*
+
+# Секреты и окружение
+.env
+.env.*
+!.env.example
+
+# Рабочие материалы агентов и ОС
+.agents/
+.DS_Store
