@@ -80,3 +80,32 @@ test('Марк видит только свои предметы, гость о�
   assert.doesNotMatch(page, /История региона/);
   assert.doesNotMatch(page, /Регионоведение/);
 });
+
+test('сводка и фильтры учитывают только личные оценки, зачёты и результаты в ожидании', async t => {
+  const db = openDatabase();
+  t.after(() => db.close());
+  const [mira, mark] = await setupDemo(db);
+  db.exec(`INSERT INTO grades (student_id, subject, assessment, result) VALUES
+    (1, 'Французский язык', 'Экзамен', '2'), (1, 'Практика', 'Зачёт', NULL)`);
+  const app = createApp(db, options);
+  const miraSession = await login(app, mira);
+  const markSession = await login(app, mark);
+
+  const debts = await (await get(app, '/grades?view=debts', miraSession)).text();
+  assert.match(debts, /Средний балл<\/dt><dd>3,5<\/dd>/);
+  assert.match(debts, /Ждут результата<\/dt><dd>2<\/dd>/);
+  assert.match(debts, /view=debts" aria-current="page"/);
+  assert.match(debts, /Французский язык/);
+  assert.doesNotMatch(debts, /Английский язык|Практика|Экономическая статистика/);
+
+  const pending = await (await get(app, '/grades?view=pending', miraSession)).text();
+  assert.match(pending, /Регионоведение[\s\S]*Практика/);
+  assert.doesNotMatch(pending, /Французский язык|Английский язык/);
+
+  const markDebts = await (await get(app, '/grades?view=debts', markSession)).text();
+  assert.match(markDebts, /Экономическая статистика[\s\S]*Не зачтено/);
+  assert.doesNotMatch(markDebts, /Французский язык/);
+
+  const fallback = await (await get(app, '/grades?view=unknown', miraSession)).text();
+  assert.match(fallback, /Английский язык[\s\S]*Французский язык/);
+});

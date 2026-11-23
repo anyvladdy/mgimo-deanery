@@ -67,10 +67,31 @@ test('расписание Миры показывает день, неделю 
   assert.match(body, /10:40/);
   assert.match(body, /ауд\. 307/);
   assert.match(body, /Было 214/);
+  assert.equal((body.match(/Английский язык/g) ?? []).length, 1, 'выбранный день не дублируется в неделе');
   assert.match(body, /История региона/);
   assert.match(body, /Среда, 25 ноября 2026/);
   assert.match(body, /href="\?date=2026-11-23#week"/);
   assert.equal((body.match(/id="lesson-101"/g) ?? []).length, 1, 'якорь пары не дублируется');
+});
+
+test('переход с «Сегодня» и из уведомлений ведёт к доступной карточке перенесённой пары', async () => {
+  const [mira] = await setupDemo(db);
+  const app = createApp(db, appOptions);
+  const session = await login(app, mira);
+
+  for (const source of ['/', '/notices']) {
+    const page = await (await get(app, source, session)).text();
+    const link = page.match(/href="(\/schedule\?date=2026-11-23#lesson-101)"/);
+    assert.ok(link, `есть ссылка на перенос из ${source}`);
+    const { pathname, search, hash } = new URL(link[1], 'http://localhost');
+    const id = hash.slice(1);
+    const schedule = await (await get(app, pathname + search, session)).text();
+    const row = daySection(schedule).match(new RegExp(`<div id="${id}"([^>]*)>([\\s\\S]*?)</div>`));
+    assert.ok(row, 'в выбранном дне есть пара по якорю');
+    assert.match(row[1], /tabindex="-1"/);
+    assert.match(row[2], /datetime="10:40"[\s\S]*Английский язык/);
+    assert.match(row[2], /Сейчас в ауд\. 307[\s\S]*Было 214/);
+  }
 });
 
 test('день и неделя фильтруются по дате, пустая неделя имеет понятный текст', async () => {
@@ -82,6 +103,8 @@ test('день и неделя фильтруются по дате, пуста�
   assert.match(daySection(wednesday), /История региона/);
   assert.doesNotMatch(daySection(wednesday), /Английский язык/);
   assert.match(wednesday, /href="\?date=2026-11-25#day"/);
+  assert.match(wednesday, /Число занятий — 1" aria-current="date"/);
+  assert.match(wednesday, /href="\?date=2026-11-30#calendar"/);
 
   const empty = await (await get(app, '/schedule?date=2026-11-30', session)).text();
   assert.match(empty, /В этот день пар нет/);
@@ -89,6 +112,35 @@ test('день и неделя фильтруются по дате, пуста�
 
   const fallback = await (await get(app, '/schedule?date=2026-02-30', session)).text();
   assert.match(fallback, /Английский язык/);
+});
+
+test('версия для печати сохраняет выбранную неделю, переносы и границы группы', async () => {
+  const [mira, mark] = await setupDemo(db);
+  const app = createApp(db, appOptions);
+  const path = '/schedule?date=2026-11-25&view=print';
+  const guest = await app.request(path);
+  assert.equal(guest.status, 303);
+
+  const miraSession = await login(app, mira);
+  const page = await (await get(app, path, miraSession)).text();
+  assert.match(page, /Расписание на неделю/);
+  assert.match(page, /Группа Р-21 · 23–29 ноября 2026/);
+  assert.match(page, /ауд\. 307[\s\S]*Было 214/);
+  assert.match(page, /История региона/);
+  assert.doesNotMatch(page, /Микроэкономика|week-picker/);
+  assert.equal((page.match(/Английский язык/g) ?? []).length, 1);
+
+  const markSession = await login(app, mark);
+  const otherPage = await (await get(app, path, markSession)).text();
+  assert.match(otherPage, /Микроэкономика/);
+  assert.doesNotMatch(otherPage, /Английский язык|307/);
+
+  const farBoundary = await get(app, '/schedule?date=9999-12-31&view=print', miraSession);
+  assert.equal(farBoundary.status, 200);
+  assert.match(await farBoundary.text(), /27–31 декабря 9999/);
+  const earlyBoundary = await get(app, '/schedule?date=0000-01-01', miraSession);
+  assert.equal(earlyBoundary.status, 200);
+  assert.doesNotMatch(await earlyBoundary.text(), /NaN|undefined|\?date=-/);
 });
 
 test('расписание Марка содержит только его группу, гость отправляется на вход', async () => {

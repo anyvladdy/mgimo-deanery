@@ -10,14 +10,13 @@ export function isDate(value) {
 export function weekStartOf(date) {
   const value = new Date(`${date}T00:00:00Z`);
   const offset = (value.getUTCDay() + 6) % 7;
-  value.setUTCDate(value.getUTCDate() - offset);
-  return value.toISOString().slice(0, 10);
+  return shiftDate(date, -offset);
 }
 
 export function shiftDate(date, days) {
   const value = new Date(`${date}T00:00:00Z`);
   value.setUTCDate(value.getUTCDate() + days);
-  return value.toISOString().slice(0, 10);
+  return value.toISOString().split('T')[0];
 }
 
 export function dayForStudent(db, studentId, date) {
@@ -29,16 +28,25 @@ export function dayForStudent(db, studentId, date) {
 }
 
 export function weekForStudent(db, studentId, weekStart) {
+  const weekEnd = shiftDate(weekStart, 6);
   return db.prepare(`
     SELECT * FROM student_schedule
-    WHERE student_id = ? AND lesson_date >= ? AND lesson_date < date(?, '+7 days')
+    WHERE student_id = ? AND lesson_date BETWEEN ? AND ?
     ORDER BY lesson_date, starts_at, lesson_id
-  `).all(studentId, weekStart, weekStart);
+  `).all(studentId, isDate(weekStart) ? weekStart : '0000-01-01', isDate(weekEnd) ? weekEnd : '9999-12-31');
 }
 
 export function changesForStudent(db, studentId, weekStart) {
   return weekForStudent(db, studentId, weekStart)
     .filter(lesson => lesson.change_id !== null);
+}
+
+export function recentChangesForStudent(db, studentId) {
+  return db.prepare(`
+    SELECT * FROM student_schedule
+    WHERE student_id = ? AND change_id IS NOT NULL
+    ORDER BY lesson_date DESC, change_id DESC LIMIT 25
+  `).all(studentId);
 }
 
 export function markChangeRead(db, studentId, changeId) {

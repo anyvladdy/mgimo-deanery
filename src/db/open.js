@@ -4,12 +4,18 @@ import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 
 const schema = readFileSync(new URL('./schema.sql', import.meta.url), 'utf8');
+const academicGroups = readFileSync(new URL('./sync-academic-groups.sql', import.meta.url), 'utf8');
+
+export function syncAcademicGroups(db) {
+  db.exec(academicGroups);
+}
 
 export function openDatabase(filename = ':memory:') {
   const db = new DatabaseSync(filename);
   try {
     db.exec('PRAGMA foreign_keys = ON');
     db.exec(schema);
+    syncAcademicGroups(db);
     return db;
   } catch (error) {
     db.close();

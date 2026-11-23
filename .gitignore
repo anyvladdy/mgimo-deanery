@@ -14,5 +14,8 @@ journal/*.sqlite*
 !.env.example
 
 # Рабочие материалы агентов и ОС
-.agents/
+/.agents/*
+!/.agents/ECC-SKILLS.md
+!/.agents/skills/
+!/.agents/licenses/
 .DS_Store

@@ -1,28 +1,35 @@
 import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
-import { openAppDatabase } from '../src/db/open.js';
+import { openAppDatabase, syncAcademicGroups } from '../src/db/open.js';
 import { passwordRecord } from '../src/account/passwords.js';
+import { demoProfiles } from '../src/account/demo-profiles.js';
 
 const seed = readFileSync(new URL('./seed.sql', import.meta.url), 'utf8');
-const students = [
-  { id: 1, login: 'mira' },
-  { id: 2, login: 'mark' },
-];
 
 export async function setupDemo(db, { rotate = false } = {}) {
+  const accountByStudent = db.prepare('SELECT login FROM accounts WHERE student_id = ?');
   const prepared = [];
-  for (const student of students) {
+  for (const student of demoProfiles) {
+    if (!rotate && accountByStudent.get(student.id)?.login === student.login) continue;
     const password = randomBytes(12).toString('base64url');
     prepared.push({ ...student, password, ...await passwordRecord(password) });
   }
   db.exec('BEGIN IMMEDIATE');
   try {
+    const studentById = db.prepare('SELECT full_name FROM students WHERE id = ?');
+    for (const student of demoProfiles) {
+      const existing = accountByStudent.get(student.id);
+      const profile = studentById.get(student.id);
+      if (existing ? existing.login !== student.login : profile && profile.full_name !== student.name) {
+        throw new Error('Демо-профиль пересекается с существующей учётной записью.');
+      }
+    }
     db.exec(seed);
+    syncAcademicGroups(db);
     const issued = [];
     for (const item of prepared) {
-      const existing = db.prepare('SELECT login FROM accounts WHERE student_id = ?').get(item.id);
-      if (existing && existing.login !== item.login) throw new Error('У демо-студента другая учётная запись.');
+      const existing = accountByStudent.get(item.id);
       if (existing && !rotate) continue;
       db.prepare(`
         INSERT INTO accounts (student_id, login, salt, password_hash) VALUES (?, ?, ?, ?)

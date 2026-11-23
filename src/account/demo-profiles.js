@@ -1,0 +1,17 @@
+export const demoProfiles = [
+  { id: 1, login: 'mira', name: 'Мира Луговая' },
+  { id: 2, login: 'mark', name: 'Марк Ясный' },
+  { id: 1001, login: 'lida', name: 'Лида Ветрова' },
+  { id: 1002, login: 'roman', name: 'Роман Соснов' },
+  { id: 1003, login: 'alina', name: 'Алина Кленова' },
+  { id: 1004, login: 'ilya', name: 'Илья Рябинов' },
+  { id: 1005, login: 'sonya', name: 'Соня Вересова' },
+  { id: 1006, login: 'timur', name: 'Тимур Озёрный' },
+  { id: 1007, login: 'eva', name: 'Ева Лескова' },
+  { id: 1008, login: 'nikita', name: 'Никита Яров' },
+  { id: 1009, login: 'dina', name: 'Дина Речная' },
+  { id: 1010, login: 'lev', name: 'Лев Гранов' },
+  { id: 1011, login: 'vera', name: 'Вера Берёзина' },
+  { id: 1012, login: 'pavel', name: 'Павел Ивов' },
+  { id: 1013, login: 'yulia', name: 'Юлия Полевая' },
+];

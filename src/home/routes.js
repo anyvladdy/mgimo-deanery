@@ -1,16 +1,23 @@
 import { Hono } from 'hono';
 import { homePage } from './pages.js';
+import { outstandingClarifications } from '../requests/requests.js';
+import { upcomingAssessmentsForStudent } from '../grades/grades.js';
 import { lessonsToday } from './home.js';
-import { demoDate, markChangeRead } from '../schedule/schedule.js';
+import { markChangeRead } from '../schedule/schedule.js';
 
-export function homeRoutes(db) {
+export function homeRoutes(db, currentSchoolDay) {
   const routes = new Hono();
 
   routes.get('/', c => {
+    const schoolDay = currentSchoolDay();
+    const studentId = c.get('studentId');
     return c.html(homePage({
       student: c.get('student'),
-      lessons: lessonsToday(db, c.get('studentId'), demoDate),
+      date: schoolDay.date,
+      ...lessonsToday(db, studentId, schoolDay),
       csrf: c.get('csrfToken'),
+      clarifications: outstandingClarifications(db, studentId),
+      assessments: upcomingAssessmentsForStudent(db, studentId, schoolDay.date).slice(0, 3),
     }));
   });
 

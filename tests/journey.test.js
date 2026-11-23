@@ -4,7 +4,7 @@ import { setupDemo } from '../demo/setup.js';
 import { openDatabase } from '../src/db/open.js';
 import { createApp } from '../src/server.js';
 
-const options = { secret: 'local-test-secret-for-end-to-end-journey', secure: true, showProfiles: true };
+const options = { secret: 'local-test-secret-for-end-to-end-journey', secure: true };
 
 function cookie(response) {
   return response.headers.get('set-cookie').split(';')[0];

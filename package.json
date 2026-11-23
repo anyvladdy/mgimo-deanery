@@ -10,7 +10,8 @@
     "demo": "node demo/preview.js",
     "test": "node --test tests/*.test.js",
     "team": "node scripts/team.js",
-    "start": "DEMO_PROFILES=1 node src/server.js",
+    "start": "node src/server.js",
+    "demo:office": "node demo/staff.js",
     "demo:setup": "node demo/setup.js"
   },
   "dependencies": {

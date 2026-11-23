@@ -55,6 +55,10 @@ test('Мира подаёт заявку, видит её после повто�
   assert.match(listPage, /Справка об обучении/);
   assert.match(listPage, /Готова/, 'заранее подготовленная заявка показывает статус «Готова»');
   assert.match(listPage, /name="_csrf"/);
+  const readyLocation = listPage.match(/href="(\/requests\/\d+)"/)[1];
+  const readyPage = await (await get(app, readyLocation, miraSession)).text();
+  assert.match(readyPage, /aria-current="step"><strong>Готова/);
+  assert.match(readyPage, /Справку можно получить в деканате/);
 
   const submitted = await post(app, '/requests', miraSession, { _csrf: token(listPage) });
   assert.equal(submitted.status, 303);
@@ -65,7 +69,9 @@ test('Мира подаёт заявку, видит её после повто�
   assert.equal(detail.status, 200);
   const detailPage = await detail.text();
   assert.match(detailPage, /Справка об обучении/);
-  assert.match(detailPage, /Принята/);
+  assert.match(detailPage, /aria-current="step"><strong>Принята/);
+  assert.match(detailPage, /<strong>Готова<\/strong><span>Ожидается/);
+  assert.doesNotMatch(detailPage, /Справку можно получить в деканате/);
 
   // Обновление страницы результата не создаёт вторую заявку.
   assert.equal((await get(app, location, miraSession)).status, 200);
